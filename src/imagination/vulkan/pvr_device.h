@@ -33,6 +33,8 @@
 #include "pvr_usc.h"
 #include "pvr_winsys.h"
 
+#define PVR_RT_DATASET_CACHE_MAX 64U
+
 typedef struct _pco_ctx pco_ctx;
 
 struct pvr_border_color_table;
@@ -152,6 +154,13 @@ struct pvr_device {
 
    simple_mtx_t rs_mtx;
    struct list_head render_states;
+
+   /* Dataset cache */
+   simple_mtx_t rt_dataset_cache_mtx;
+
+   struct pvr_rt_dataset *rt_dataset_cache[PVR_RT_DATASET_CACHE_MAX];
+
+   uint32_t rt_dataset_cache_count;
 
    /* Data Source for GPU tracing */
    struct pvr_ds_device ds;

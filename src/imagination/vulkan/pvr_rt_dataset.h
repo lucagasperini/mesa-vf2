@@ -84,4 +84,17 @@ pvr_render_targets_datasets_destroy(struct pvr_render_target *render_target)
    }
 }
 
+void pvr_rt_dataset_cache_init(struct pvr_device *device);
+
+void pvr_rt_dataset_cache_finish(struct pvr_device *device);
+
+struct pvr_rt_dataset *
+pvr_rt_dataset_cache_take(struct pvr_device *device,
+                          uint32_t width,
+                          uint32_t height,
+                          uint32_t samples,
+                          uint32_t layers);
+
+void pvr_rt_dataset_cache_put(struct pvr_rt_dataset *rt_dataset);
+
 #endif /* PVR_RT_DATASET_H */
