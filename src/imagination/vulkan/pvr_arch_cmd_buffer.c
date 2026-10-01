@@ -3341,12 +3341,25 @@ static inline VkResult pvr_render_targets_datasets_create(
       if (render_target->valid_mask & BITFIELD_BIT(view_idx))
          continue;
 
-      result = pvr_arch_render_target_dataset_create(device,
-                                                     rstate->width,
-                                                     rstate->height,
-                                                     hw_render->sample_count,
-                                                     layers,
-                                                     &rt_dataset);
+      rt_dataset = pvr_rt_dataset_cache_take(device,
+                                 rstate->width,
+                                 rstate->height,
+                                 hw_render->sample_count,
+                                 layers);
+
+      if (!rt_dataset) {
+         result = pvr_arch_render_target_dataset_create(device,
+                                                rstate->width,
+                                                rstate->height,
+                                                hw_render->sample_count,
+                                                layers,
+                                                &rt_dataset);
+         if (result != VK_SUCCESS) {
+            pvr_render_targets_datasets_destroy(render_target);
+            pthread_mutex_unlock(&render_target->mutex);
+            return result;
+         }
+      }
       if (result != VK_SUCCESS) {
          pvr_render_targets_datasets_destroy(render_target);
          pthread_mutex_unlock(&render_target->mutex);

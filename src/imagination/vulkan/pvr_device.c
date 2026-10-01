@@ -155,6 +155,31 @@ err_release_lock:
    return result;
 }
 
+static void
+pvr_render_state_cache_rt_datasets(struct pvr_render_state *rstate)
+{
+   for (uint32_t i = 0; i < rstate->render_targets_count; i++) {
+      struct pvr_render_target *render_target =
+         &rstate->render_targets[i];
+
+      pthread_mutex_lock(&render_target->mutex);
+
+      u_foreach_bit (valid_idx, render_target->valid_mask) {
+         struct pvr_rt_dataset *rt_dataset =
+            render_target->rt_dataset[valid_idx];
+
+         if (rt_dataset)
+            pvr_rt_dataset_cache_put(rt_dataset);
+
+         render_target->rt_dataset[valid_idx] = NULL;
+         render_target->valid_mask &=
+            ~BITFIELD_BIT(valid_idx);
+      }
+
+      pthread_mutex_unlock(&render_target->mutex);
+   }
+}
+
 void pvr_rstate_entry_add(struct pvr_device *device,
                           struct pvr_render_state *rstate)
 {
@@ -175,6 +200,8 @@ void pvr_rstate_entry_remove(struct pvr_device *device,
                              link) {
       if (entry != rstate)
          continue;
+      
+      pvr_render_state_cache_rt_datasets(entry);
 
       pvr_render_state_cleanup(device, &device->vk.alloc, rstate);
       list_del(&entry->link);
@@ -1164,4 +1191,120 @@ void pvr_GetImageMemoryRequirements2(VkDevice _device,
          break;
       }
    }
+}
+
+void
+pvr_rt_dataset_cache_init(struct pvr_device *device)
+{
+   simple_mtx_init(&device->rt_dataset_cache_mtx, mtx_plain);
+
+   memset(device->rt_dataset_cache,
+          0,
+          sizeof(device->rt_dataset_cache));
+
+   device->rt_dataset_cache_count = 0;
+}
+
+struct pvr_rt_dataset *
+pvr_rt_dataset_cache_take(struct pvr_device *device,
+                          uint32_t width,
+                          uint32_t height,
+                          uint32_t samples,
+                          uint32_t layers)
+{
+   struct pvr_rt_dataset *rt_dataset = NULL;
+
+   simple_mtx_lock(&device->rt_dataset_cache_mtx);
+
+   for (uint32_t i = 0; i < device->rt_dataset_cache_count; i++) {
+      struct pvr_rt_dataset *candidate =
+         device->rt_dataset_cache[i];
+
+      if (candidate->width != width ||
+          candidate->height != height ||
+          candidate->samples != samples ||
+          candidate->layers != layers)
+         continue;
+
+      rt_dataset = candidate;
+
+      /*
+       * Remove entry in O(1): replace it with the last cache entry.
+       */
+      device->rt_dataset_cache_count--;
+
+      device->rt_dataset_cache[i] =
+         device->rt_dataset_cache[device->rt_dataset_cache_count];
+
+      device->rt_dataset_cache[device->rt_dataset_cache_count] = NULL;
+
+      break;
+   }
+
+   simple_mtx_unlock(&device->rt_dataset_cache_mtx);
+
+   if (rt_dataset) {
+      /*
+       * We're re-purposing this dataset as if it had just been created.
+       *
+       * A newly allocated pvr_rt_dataset comes from vk_zalloc(), so
+       * need_frag starts false and rt_data_idx starts 0.
+       */
+      rt_dataset->need_frag = false;
+      rt_dataset->rt_data_idx = 0;
+   }
+
+   return rt_dataset;
+}
+
+void
+pvr_rt_dataset_cache_put(struct pvr_rt_dataset *rt_dataset)
+{
+   struct pvr_device *device = rt_dataset->device;
+   bool cached = false;
+
+   simple_mtx_lock(&device->rt_dataset_cache_mtx);
+
+   if (device->rt_dataset_cache_count <
+       PVR_RT_DATASET_CACHE_MAX) {
+      device->rt_dataset_cache[
+         device->rt_dataset_cache_count++] = rt_dataset;
+
+      cached = true;
+   }
+
+   simple_mtx_unlock(&device->rt_dataset_cache_mtx);
+
+   /*
+    * Do the expensive destruction outside the cache mutex.
+    */
+   if (!cached)
+      pvr_render_target_dataset_destroy(rt_dataset);
+}
+
+void
+pvr_rt_dataset_cache_finish(struct pvr_device *device)
+{
+   struct pvr_rt_dataset
+      *datasets[PVR_RT_DATASET_CACHE_MAX];
+
+   uint32_t count;
+
+   simple_mtx_lock(&device->rt_dataset_cache_mtx);
+
+   count = device->rt_dataset_cache_count;
+
+   for (uint32_t i = 0; i < count; i++) {
+      datasets[i] = device->rt_dataset_cache[i];
+      device->rt_dataset_cache[i] = NULL;
+   }
+
+   device->rt_dataset_cache_count = 0;
+
+   simple_mtx_unlock(&device->rt_dataset_cache_mtx);
+
+   for (uint32_t i = 0; i < count; i++)
+      pvr_render_target_dataset_destroy(datasets[i]);
+
+   simple_mtx_destroy(&device->rt_dataset_cache_mtx);
 }
