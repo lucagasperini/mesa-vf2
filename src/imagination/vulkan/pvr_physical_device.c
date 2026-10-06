@@ -1166,8 +1166,14 @@ VkResult pvr_physical_device_init(struct pvr_physical_device *pdevice,
       result = VK_ERROR_OUT_OF_HOST_MEMORY;
       goto err_out;
    }
-
-   if (instance->vk.enabled_extensions.KHR_display && drm_display_device) {
+   
+   /*
+   * The display device is also needed for regular WSI allocations on
+   * systems where the render GPU and display controller are separate.
+   * Do not restrict it to VK_KHR_display, as Wayland/X11 applications
+   * don't need to enable that extension.
+   */
+   if (drm_display_device) {
       display_path = vk_strdup(&instance->vk.alloc,
                                drm_display_device->nodes[DRM_NODE_PRIMARY],
                                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
