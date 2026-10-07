@@ -57,7 +57,7 @@
  * TODO: Investigate if a different default size can improve the overall
  * performance of internal driver allocations.
  */
-#define PVR_SUBALLOCATOR_GENERAL_SIZE (128 * 1024)
+#define PVR_SUBALLOCATOR_GENERAL_SIZE (512 * 1024)
 #define PVR_SUBALLOCATOR_PDS_SIZE (128 * 1024)
 #define PVR_SUBALLOCATOR_TRANSFER_SIZE (128 * 1024)
 #define PVR_SUBALLOCATOR_USC_SIZE (128 * 1024)
