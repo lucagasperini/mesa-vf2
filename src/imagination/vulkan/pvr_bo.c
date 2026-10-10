@@ -24,6 +24,12 @@
  * SOFTWARE.
  */
 
+#include "util/list.h"
+#include "util/log.h"
+#include "util/pb_slab.h"
+#include "util/sparse_array.h"
+#include "util/u_call_once.h"
+#include "vulkan/vulkan_core.h"
 #include <assert.h>
 #include <limits.h>
 #include <stddef.h>
@@ -53,6 +59,8 @@
 #include "vk_alloc.h"
 #include "vk_log.h"
 
+#define PVR_BO_SUBALLOC_SLAB_MAX_SIZE 64*1024
+
 struct pvr_bo_store {
    struct rb_tree tree;
    simple_mtx_t mutex;
@@ -62,6 +70,12 @@ struct pvr_bo_store {
 struct pvr_bo_store_entry {
    struct rb_node node;
    struct pvr_bo bo;
+};
+
+enum pvr_slab_heap {
+    PVR_HEAP_NORMAL = 0,
+    PVR_HEAP_ZEROED = 1,
+    PVR_HEAP_COUNT = 2
 };
 
 #define entry_from_node(node_) \
@@ -492,6 +506,122 @@ void pvr_bo_free(struct pvr_device *device, struct pvr_bo *pvr_bo)
    pvr_bo_free_bo(device, pvr_bo);
 }
 
+
+static void pvr_bo_suballoc_set(struct pvr_suballocator *allocator,
+                         struct pvr_suballoc_bo *suballoc_bo,
+                         struct pvr_bo* bo,
+                         uint32_t aligned_size,
+                         uint32_t aligned_offset) 
+{
+   suballoc_bo->allocator = allocator;
+   suballoc_bo->bo = bo;
+   suballoc_bo->dev_addr = 
+      PVR_DEV_ADDR_OFFSET(bo->vma->dev_addr, aligned_offset);
+   suballoc_bo->offset = aligned_offset;
+   suballoc_bo->size = aligned_size;
+}
+
+static bool 
+pvr_bo_slab_reclaim(void *priv, 
+               struct pb_slab_entry *entry)
+{
+   struct pvr_suballocator *allocator = priv;
+   struct pvr_suballoc_bo* suballoc = 
+      container_of(entry, struct pvr_suballoc_bo, entry);
+
+   return suballoc->can_reclaim;
+}
+
+
+static struct pb_slab* 
+pvr_bo_slab_alloc(void *priv, 
+              unsigned heap,
+              unsigned entry_size,
+              unsigned group_index) 
+{
+   struct pvr_suballocator *allocator = priv;
+   struct pvr_bo *bo = NULL;
+   uint32_t alloc_size = allocator->default_size;
+   const uint32_t cache_line_size = 
+   pvr_get_slc_cache_line_size(&allocator->device->pdevice->dev_info);
+   uint32_t suballoc_size = ALIGN_POT(entry_size, cache_line_size);
+   uint32_t num_entries = alloc_size / suballoc_size;
+   VkResult result;
+
+   bo = vk_alloc(&allocator->device->vk.alloc,
+                          sizeof(*bo),
+                          8,
+                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!bo) 
+      goto err_bo;
+
+   result = pvr_bo_alloc(allocator->device,
+                              allocator->heap,
+                              alloc_size,
+                              suballoc_size,
+                              PVR_BO_ALLOC_FLAG_CPU_MAPPED,
+                              &bo);
+   if (result != VK_SUCCESS) {
+            simple_mtx_unlock(&allocator->mtx);
+            return NULL;
+   }
+
+   if(heap == PVR_HEAP_ZEROED)
+      memset(bo->bo->map, 0, alloc_size);
+
+   bo->suballoc = vk_alloc(&allocator->device->vk.alloc,
+                          sizeof(struct pvr_suballoc_bo) * num_entries,
+                          8,
+                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+   if(!bo->suballoc) 
+      goto err_suballoc_bo;
+
+   list_inithead(&bo->slab.free);
+   list_inithead(&bo->slab.head);
+
+   for(uint32_t i = 0; i < num_entries; i++) {
+      struct pvr_suballoc_bo *tmp = bo->suballoc + i;
+      pvr_bo_suballoc_set(allocator, 
+         tmp,
+         bo, 
+         suballoc_size, 
+         suballoc_size * i);
+      tmp->never_used = true;
+      tmp->entry.slab = &bo->slab;
+      list_add(&(tmp->entry.head), &(bo->slab.free));
+   }
+
+   bo->slab.entry_size = suballoc_size;
+   bo->slab.num_entries = num_entries;
+   bo->slab.num_free = num_entries;
+   bo->slab.group_index = group_index;
+   return &bo->slab;
+err_suballoc_bo:
+   if (bo->suballoc) {
+      vk_free(&allocator->device->vk.alloc, bo->suballoc);
+   }
+err_bo:
+   if (bo) 
+      vk_free(&allocator->device->vk.alloc, bo);
+   vk_error(allocator->device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   return NULL;
+}
+
+
+static void 
+pvr_bo_slab_free(void *priv, 
+               struct pb_slab *entry)
+{
+   struct pvr_suballocator *allocator = priv;
+   struct pvr_bo* bo = container_of(entry, struct pvr_bo, slab);
+
+   assert(p_atomic_dec_zero(&bo->ref_count));
+   vk_free(&allocator->device->vk.alloc, bo->suballoc);
+   pvr_bo_free(allocator->device, bo);
+}
+
+
 /**
  * \brief Interface to initialize a pvr_suballocator.
  *
@@ -513,6 +643,16 @@ void pvr_bo_suballocator_init(struct pvr_suballocator *allocator,
       .heap = heap,
    };
 
+   pb_slabs_init(&allocator->slabs_manager, 
+      6, 
+      16,
+      PVR_HEAP_COUNT,
+      false,
+      allocator, 
+      pvr_bo_slab_reclaim, 
+      pvr_bo_slab_alloc, 
+      pvr_bo_slab_free);
+
    simple_mtx_init(&allocator->mtx, mtx_plain);
 }
 
@@ -525,18 +665,96 @@ void pvr_bo_suballocator_init(struct pvr_suballocator *allocator,
  */
 void pvr_bo_suballocator_fini(struct pvr_suballocator *allocator)
 {
-   pvr_bo_free(allocator->device, allocator->bo);
-   pvr_bo_free(allocator->device, allocator->bo_cached);
-
+   pb_slabs_deinit(&allocator->slabs_manager);
    simple_mtx_destroy(&allocator->mtx);
 }
 
-static inline struct pvr_bo *pvr_bo_get_ref(struct pvr_bo *bo)
+static VkResult
+pvr_bo_alloc_big(struct pvr_suballocator *allocator, 
+                  uint32_t size,
+                  uint32_t align,
+                  bool zero_on_alloc,
+                  struct pvr_suballoc_bo **const suballoc_bo_out) 
 {
-   p_atomic_inc(&bo->ref_count);
+   struct pvr_bo *bo = NULL;
+   struct pvr_suballoc_bo *suballoc_bo = NULL;
+   uint32_t alloc_size = ALIGN_POT(size, align);
+   VkResult result;
+   
+   bo = vk_alloc(&allocator->device->vk.alloc,
+                          sizeof(*bo),
+                          8,
+                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!bo) 
+      goto err_free;
 
-   return bo;
+   result = pvr_bo_alloc(allocator->device,
+                              allocator->heap,
+                              alloc_size,
+                              align,
+                              PVR_BO_ALLOC_FLAG_CPU_MAPPED,
+                              &bo);
+   if (result != VK_SUCCESS)
+      goto err_free;
+
+   if(zero_on_alloc)
+      memset(bo->bo->map, 0, alloc_size);
+
+   suballoc_bo = vk_alloc(&allocator->device->vk.alloc,
+                          sizeof(struct pvr_suballoc_bo),
+                          8,
+                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+   if(!suballoc_bo) 
+      goto err_free;
+
+   pvr_bo_suballoc_set(allocator, suballoc_bo, bo, alloc_size, 0);
+   p_atomic_inc(&bo->ref_count);
+   *suballoc_bo_out = suballoc_bo;
+   simple_mtx_unlock(&allocator->mtx);
+   return VK_SUCCESS;
+err_free:
+   if (bo) 
+      vk_free(&allocator->device->vk.alloc, bo);
+   if (suballoc_bo) {
+      vk_free(&allocator->device->vk.alloc, suballoc_bo);
+   }
+   simple_mtx_unlock(&allocator->mtx);
+   return vk_error(allocator->device, VK_ERROR_OUT_OF_HOST_MEMORY);
 }
+
+static VkResult
+pvr_bo_alloc_slab(struct pvr_suballocator *allocator,
+                         uint32_t size,
+                         uint32_t align,
+                         bool zero_on_alloc,
+                         struct pvr_suballoc_bo **const suballoc_bo_out) 
+{
+   struct pb_slab_entry* entry = NULL;
+   struct pvr_suballoc_bo* suballoc = NULL;
+
+   entry = pb_slab_alloc_reclaimed(
+         &allocator->slabs_manager, 
+         size, 
+         zero_on_alloc ? PVR_HEAP_ZEROED : PVR_HEAP_NORMAL, 
+         false);
+      if(!entry) {
+         mesa_loge("Cannot alloc slab");
+         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+      }
+
+      suballoc = container_of(entry, struct pvr_suballoc_bo, entry);
+      if(!suballoc->never_used && zero_on_alloc) {
+         memset(suballoc->bo->bo->map, 0, suballoc->size);
+      }
+
+      p_atomic_inc(&suballoc->bo->ref_count);
+      suballoc->never_used = true;
+      *suballoc_bo_out = suballoc;
+      simple_mtx_unlock(&allocator->mtx);
+      return VK_SUCCESS;
+}
+
 
 /**
  * \brief Interface to sub-allocate buffer objects.
@@ -552,104 +770,26 @@ static inline struct pvr_bo *pvr_bo_get_ref(struct pvr_bo *bo)
  *
  * \sa # pvr_bo_suballoc_free()
  */
-VkResult pvr_bo_suballoc(struct pvr_suballocator *allocator,
+VkResult 
+pvr_bo_suballoc(struct pvr_suballocator *allocator,
                          uint32_t size,
                          uint32_t align,
                          bool zero_on_alloc,
                          struct pvr_suballoc_bo **const suballoc_bo_out)
-{
-   const struct pvr_device_info *dev_info =
-      &allocator->device->pdevice->dev_info;
-   const uint32_t cache_line_size = pvr_get_slc_cache_line_size(dev_info);
-   struct pvr_suballoc_bo *suballoc_bo;
-   uint32_t alloc_size, aligned_size;
-   VkResult result;
-
-   suballoc_bo = vk_alloc(&allocator->device->vk.alloc,
-                          sizeof(*suballoc_bo),
-                          8,
-                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (!suballoc_bo)
-      return vk_error(allocator->device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   /* This cache line value is used for all type of allocations (i.e. USC, PDS,
-    * transfer and general), so always align them to at least the size of the
-    * cache line.
-    */
-   align = MAX2(align, cache_line_size);
-   assert(util_is_power_of_two_nonzero(align));
-   aligned_size = ALIGN_POT(size, align);
-
-   simple_mtx_lock(&allocator->mtx);
-
-   if (allocator->bo) {
-      uint32_t aligned_offset = ALIGN_POT(allocator->next_offset, align);
-
-      if (aligned_offset + aligned_size <= allocator->bo->bo->size) {
-         suballoc_bo->allocator = allocator;
-         suballoc_bo->bo = pvr_bo_get_ref(allocator->bo);
-         suballoc_bo->dev_addr =
-            PVR_DEV_ADDR_OFFSET(allocator->bo->vma->dev_addr, aligned_offset);
-         suballoc_bo->offset = aligned_offset;
-         suballoc_bo->size = aligned_size;
-
-         allocator->next_offset = aligned_offset + aligned_size;
-
-         if (zero_on_alloc)
-            memset(pvr_bo_suballoc_get_map_addr(suballoc_bo), 0, aligned_size);
-
-         *suballoc_bo_out = suballoc_bo;
-         simple_mtx_unlock(&allocator->mtx);
-
-         return VK_SUCCESS;
-      } else {
-         pvr_bo_free(allocator->device, allocator->bo);
-         allocator->bo = NULL;
-      }
+{ 
+   if(size <= PVR_BO_SUBALLOC_SLAB_MAX_SIZE) {
+      return pvr_bo_alloc_slab(allocator,
+         size, 
+         align, 
+         zero_on_alloc, 
+         suballoc_bo_out);
+   } else {
+      return pvr_bo_alloc_big(allocator,
+         size, 
+         align, 
+         zero_on_alloc, 
+         suballoc_bo_out);
    }
-
-   alloc_size = MAX2(aligned_size, ALIGN_POT(allocator->default_size, align));
-
-   if (allocator->bo_cached) {
-      struct pvr_winsys_bo *bo_cached = allocator->bo_cached->bo;
-
-      if (alloc_size <= bo_cached->size)
-         allocator->bo = allocator->bo_cached;
-      else
-         pvr_bo_free(allocator->device, allocator->bo_cached);
-
-      allocator->bo_cached = NULL;
-   }
-
-   if (!allocator->bo) {
-      result = pvr_bo_alloc(allocator->device,
-                            allocator->heap,
-                            alloc_size,
-                            align,
-                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
-                            &allocator->bo);
-      if (result != VK_SUCCESS) {
-         vk_free(&allocator->device->vk.alloc, suballoc_bo);
-         simple_mtx_unlock(&allocator->mtx);
-         return result;
-      }
-   }
-
-   suballoc_bo->allocator = allocator;
-   suballoc_bo->bo = pvr_bo_get_ref(allocator->bo);
-   suballoc_bo->dev_addr = allocator->bo->vma->dev_addr;
-   suballoc_bo->offset = 0;
-   suballoc_bo->size = aligned_size;
-
-   allocator->next_offset = aligned_size;
-
-   if (zero_on_alloc)
-      memset(pvr_bo_suballoc_get_map_addr(suballoc_bo), 0, aligned_size);
-
-   *suballoc_bo_out = suballoc_bo;
-   simple_mtx_unlock(&allocator->mtx);
-
-   return VK_SUCCESS;
 }
 
 /**
@@ -663,19 +803,18 @@ void pvr_bo_suballoc_free(struct pvr_suballoc_bo *suballoc_bo)
 {
    if (!suballoc_bo)
       return;
-
-   simple_mtx_lock(&suballoc_bo->allocator->mtx);
-
-   if (p_atomic_read(&suballoc_bo->bo->ref_count) == 1 &&
-       !suballoc_bo->allocator->bo_cached) {
-      suballoc_bo->allocator->bo_cached = suballoc_bo->bo;
+   
+   if(suballoc_bo->size <= PVR_BO_SUBALLOC_SLAB_MAX_SIZE) {
+      simple_mtx_lock(&suballoc_bo->allocator->mtx);
+      p_atomic_dec(&suballoc_bo->bo->ref_count);
+      suballoc_bo->can_reclaim = true;
+      pb_slab_free(&suballoc_bo->allocator->slabs_manager, 
+         &suballoc_bo->entry);
+      simple_mtx_unlock(&suballoc_bo->allocator->mtx);
    } else {
       pvr_bo_free(suballoc_bo->allocator->device, suballoc_bo->bo);
+      vk_free(&suballoc_bo->allocator->device->vk.alloc, suballoc_bo);
    }
-
-   simple_mtx_unlock(&suballoc_bo->allocator->mtx);
-
-   vk_free(&suballoc_bo->allocator->device->vk.alloc, suballoc_bo);
 }
 
 /**

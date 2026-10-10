@@ -38,6 +38,7 @@
 #include "util/list.h"
 #include "util/macros.h"
 #include "util/simple_mtx.h"
+#include "util/pb_slab.h"
 
 struct pvr_device;
 struct pvr_dump_ctx;
@@ -57,6 +58,9 @@ struct pvr_bo {
    struct pvr_winsys_bo *bo;
    struct pvr_winsys_vma *vma;
    uint32_t ref_count;
+
+   struct pb_slab slab;
+   struct pvr_suballoc_bo *suballoc;
 };
 
 struct pvr_suballocator {
@@ -70,12 +74,7 @@ struct pvr_suballocator {
    /* Mutex to protect access to all of the members below this point */
    simple_mtx_t mtx;
 
-   /* Current buffer object where sub-allocations are made from */
-   struct pvr_bo *bo;
-   /* Previous buffer that can be used when a new buffer object is needed */
-   struct pvr_bo *bo_cached;
-   /* Track from where to start the next sub-allocation */
-   uint32_t next_offset;
+   struct pb_slabs slabs_manager;
 };
 
 struct pvr_suballoc_bo {
@@ -90,8 +89,12 @@ struct pvr_suballoc_bo {
    struct pvr_suballocator *allocator;
    struct pvr_bo *bo;
    pvr_dev_addr_t dev_addr;
-   uint64_t offset;
+   uint32_t offset;
    uint32_t size;
+   bool can_reclaim;
+   bool never_used;
+
+   struct pb_slab_entry entry;
 };
 
 /**
