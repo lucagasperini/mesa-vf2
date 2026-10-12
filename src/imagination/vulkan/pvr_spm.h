@@ -75,7 +75,7 @@ struct pvr_spm_eot_state {
 };
 
 struct pvr_spm_bgobj_state {
-   struct pvr_bo *consts_buffer;
+   struct pvr_suballoc_bo *consts_buffer;
 
    /* TODO: Make this struct pvr_pds_upload? */
    struct pvr_suballoc_bo *pds_texture_data_upload;

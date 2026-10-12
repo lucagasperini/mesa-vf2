@@ -221,5 +221,5 @@ void pvr_spm_finish_bgobj_state(struct pvr_device *device,
                                 struct pvr_spm_bgobj_state *spm_bgobj_state)
 {
    pvr_bo_suballoc_free(spm_bgobj_state->pds_texture_data_upload);
-   pvr_bo_free(device, spm_bgobj_state->consts_buffer);
+   pvr_bo_suballoc_free(spm_bgobj_state->consts_buffer);
 }

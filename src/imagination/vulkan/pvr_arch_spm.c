@@ -694,7 +694,7 @@ pvr_spm_setup_texture_state_words(struct pvr_device *device,
 static VkResult pvr_pds_bgnd_program_create_and_upload(
    struct pvr_device *device,
    uint32_t texture_program_data_size_in_dwords,
-   const struct pvr_bo *consts_buffer,
+   const struct pvr_suballoc_bo *consts_buffer,
    uint32_t const_shared_regs,
    struct pvr_pds_upload *pds_upload_out)
 {
@@ -707,7 +707,7 @@ static VkResult pvr_pds_bgnd_program_create_and_upload(
    pvr_csb_pack (&texture_program.texture_dma_address[0],
                  PDSINST_DOUT_FIELDS_DOUTD_SRC0,
                  doutd_src0) {
-      doutd_src0.sbase = consts_buffer->vma->dev_addr;
+      doutd_src0.sbase = consts_buffer->dev_addr;
    }
 
    pvr_csb_pack (&texture_program.texture_dma_control[0],
@@ -795,16 +795,15 @@ VkResult pvr_arch_spm_init_bgobj_state(
 
    consts_buffer_size = PVR_DW_TO_BYTES(pvr_uscgen_spm_load_data_size(&props));
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          consts_buffer_size,
                          sizeof(uint32_t),
-                         PVR_BO_ALLOC_FLAG_CPU_MAPPED,
+                         false,
                          &spm_bgobj_state->consts_buffer);
    if (result != VK_SUCCESS)
       return result;
 
-   mem_ptr = spm_bgobj_state->consts_buffer->bo->map;
+   mem_ptr = pvr_bo_suballoc_get_map_addr(spm_bgobj_state->consts_buffer);
 
    for (unsigned u = 0; u < hw_render->tile_buffers_count; ++u) {
       unsigned tile_buffer_addr_location = pvr_uscgen_spm_buffer_data(u, true);
@@ -919,7 +918,7 @@ VkResult pvr_arch_spm_init_bgobj_state(
    return VK_SUCCESS;
 
 err_free_consts_buffer:
-   pvr_bo_free(device, spm_bgobj_state->consts_buffer);
+   pvr_bo_suballoc_free(spm_bgobj_state->consts_buffer);
 
    return result;
 }
