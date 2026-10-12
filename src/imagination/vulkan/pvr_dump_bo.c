@@ -32,6 +32,7 @@
 
 struct pvr_device;
 
+// TODO: Should we keep this in the future?
 bool pvr_dump_bo_ctx_push(struct pvr_dump_bo_ctx *const ctx,
                           struct pvr_dump_ctx *const parent_ctx,
                           struct pvr_device *const device,
@@ -71,6 +72,50 @@ err_unmap_bo:
 
 err_out:
    return false;
+}
+
+// TODO: Develop this function?
+bool pvr_dump_bo_suballoc_ctx_push(struct pvr_dump_bo_ctx *const ctx,
+                          struct pvr_dump_ctx *const parent_ctx,
+                          struct pvr_device *const device,
+                          struct pvr_suballoc_bo *const bo)
+{
+   /*
+   bool did_map_bo = false;
+
+   if (!bo->bo->map) {
+      if (pvr_bo_cpu_map_unchanged(device, bo) != VK_SUCCESS)
+         goto err_out;
+
+      did_map_bo = true;
+   }
+
+   if (bo->bo->size > UINT32_MAX) {
+      mesa_logw_once("Attempted to dump a BO larger than 4GiB; time to rework"
+                     "pvr_dump_buffer_ctx to use 64-bit sizes.");
+      goto err_unmap_bo;
+   }
+
+   if (!pvr_dump_buffer_ctx_push(&ctx->base,
+                                 parent_ctx,
+                                 bo->bo->map,
+                                 bo->bo->size)) {
+      goto err_unmap_bo;
+   }
+
+   ctx->device = device;
+   ctx->bo = bo;
+   ctx->bo_mapped_in_ctx = did_map_bo;
+*/
+   return true;
+/*
+err_unmap_bo:
+   if (did_map_bo)
+      pvr_bo_cpu_unmap(device, bo);
+
+err_out:
+   return false;
+   */
 }
 
 bool pvr_dump_bo_ctx_pop(struct pvr_dump_bo_ctx *const ctx)

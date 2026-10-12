@@ -45,6 +45,10 @@ bool pvr_dump_bo_ctx_push(struct pvr_dump_bo_ctx *ctx,
                           struct pvr_dump_ctx *parent_ctx,
                           struct pvr_device *device,
                           struct pvr_bo *bo);
+bool pvr_dump_bo_suballoc_ctx_push(struct pvr_dump_bo_ctx *const ctx,
+                          struct pvr_dump_ctx *const parent_ctx,
+                          struct pvr_device *const device,
+                          struct pvr_suballoc_bo *const bo);
 bool pvr_dump_bo_ctx_pop(struct pvr_dump_bo_ctx *ctx);
 
 #endif /* PVR_DUMP_BO_H */

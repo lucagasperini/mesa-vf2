@@ -116,9 +116,9 @@ void pvr_csb_finish(struct pvr_csb *csb)
    if (csb->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED) {
       util_dynarray_fini(&csb->deferred_cs_mem);
    } else {
-      list_for_each_entry_safe (struct pvr_bo, pvr_bo, &csb->pvr_bo_list, link) {
+      list_for_each_entry_safe (struct pvr_suballoc_bo, pvr_bo, &csb->pvr_bo_list, link) {
          list_del(&pvr_bo->link);
-         pvr_bo_free(csb->device, pvr_bo);
+         pvr_bo_suballoc_free(pvr_bo);
       }
    }
 

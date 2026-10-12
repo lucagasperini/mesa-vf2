@@ -107,7 +107,7 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
    const uint32_t cache_line_size =
       pvr_get_slc_cache_line_size(&csb->device->pdevice->dev_info);
    size_t current_state_update_size = 0;
-   struct pvr_bo *pvr_bo;
+   struct pvr_suballoc_bo *pvr_bo;
    VkResult result;
 
    /* Make sure extra space allocated for stream links is sufficient for both
@@ -121,11 +121,11 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
    STATIC_ASSERT(ROGUE_VDMCTRL_GUARD_SIZE_DEFAULT ==
                  ROGUE_CDMCTRL_GUARD_SIZE_DEFAULT);
 
-   result = pvr_bo_alloc(csb->device,
-                         csb->device->heaps.general_heap,
+   // TODO: Are we sure about zero_on_alloc always? study code below
+   result = pvr_bo_suballoc(&csb->device->suballoc_general,
                          PVR_CMD_BUFFER_CSB_BO_SIZE,
                          cache_line_size,
-                         PVR_BO_ALLOC_FLAG_CPU_MAPPED,
+                         false,
                          &pvr_bo);
    if (result != VK_SUCCESS) {
       vk_error(csb->device, result);
@@ -136,7 +136,7 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
    /* if this is not the first BO in csb */
    if (csb->pvr_bo) {
       bool zero_after_move = PVR_IS_DEBUG_SET(DUMP_CONTROL_STREAM);
-      void *new_buffer = pvr_bo->bo->map;
+      void *new_buffer = pvr_bo_suballoc_get_map_addr(pvr_bo);
 
       current_state_update_size =
          (uint8_t *)csb->next - (uint8_t *)csb->relocation_mark;
@@ -160,16 +160,16 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
       csb->end = (uint8_t *)csb->end + stream_link_space;
       assert((uint8_t *)csb->next + stream_link_space <= (uint8_t *)csb->end);
 
-      pvr_csb_emit_link_unmarked(csb, pvr_bo->vma->dev_addr, false);
+      pvr_csb_emit_link_unmarked(csb, pvr_bo->dev_addr, false);
    }
 
    csb->pvr_bo = pvr_bo;
-   csb->start = pvr_bo->bo->map;
+   csb->start = pvr_bo_suballoc_get_map_addr(pvr_bo);
 
    /* Reserve space at the end, including the default guard padding, to make
     * sure we don't run out of space when a stream link is required.
     */
-   csb->end = (uint8_t *)csb->start + pvr_bo->bo->size - stream_reserved_space;
+   csb->end = (uint8_t *)csb->start + pvr_bo->size - stream_reserved_space;
    csb->next = (uint8_t *)csb->start + current_state_update_size;
 
    list_addtail(&pvr_bo->link, &csb->pvr_bo_list);

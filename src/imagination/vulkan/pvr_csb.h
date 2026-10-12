@@ -81,7 +81,7 @@ struct pvr_csb {
    struct pvr_device *device;
 
    /* Pointer to current csb buffer object */
-   struct pvr_bo *pvr_bo;
+   struct pvr_suballoc_bo *pvr_bo;
 
    /* pointers to current bo memory */
    void *start;
@@ -152,10 +152,10 @@ static inline pvr_dev_addr_t
 pvr_csb_get_start_address(const struct pvr_csb *csb)
 {
    if (!pvr_csb_is_empty(csb)) {
-      struct pvr_bo *pvr_bo =
-         list_first_entry(&csb->pvr_bo_list, struct pvr_bo, link);
+      struct pvr_suballoc_bo *pvr_bo =
+         list_first_entry(&csb->pvr_bo_list, struct pvr_suballoc_bo, link);
 
-      return pvr_bo->vma->dev_addr;
+      return pvr_bo->dev_addr;
    }
 
    return PVR_DEV_ADDR_INVALID;

@@ -2417,11 +2417,11 @@ void pvr_csb_dump(const struct pvr_csb *const csb,
    pvr_dump_mark_section(&root_ctx, "Buffer objects");
    pvr_bo_list_dump(&root_ctx, &csb->pvr_bo_list, nr_bos);
 
-   if (!pvr_dump_bo_ctx_push(
+   if (!pvr_dump_bo_suballoc_ctx_push(
           &first_bo_ctx,
           &root_ctx,
           device,
-          list_first_entry(&csb->pvr_bo_list, struct pvr_bo, link))) {
+          list_first_entry(&csb->pvr_bo_list, struct pvr_suballoc_bo, link))) {
       pvr_dump_mark_section(&root_ctx, "First buffer");
       pvr_dump_println(&root_ctx, "<unable to read buffer>");
       goto end_dump;
