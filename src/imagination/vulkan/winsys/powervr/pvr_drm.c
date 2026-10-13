@@ -599,7 +599,8 @@ static VkResult pvr_drm_setup_heaps(struct pvr_drm_winsys *const drm_ws)
       /* Optional heaps */
       switch (i) {
       case DRM_PVR_HEAP_RGNHDR:
-         drm_ws->rgn_hdr_heap_present = present;
+         // FIXME: Should we enable again hdr heap? so we need dedicated bo allocator?
+         drm_ws->rgn_hdr_heap_present = false;
          if (!present)
             continue;
          break;

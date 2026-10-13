@@ -474,8 +474,7 @@ pvr_rt_rgn_headers_data_init(struct pvr_device *device,
                                          &rt_dataset->rgn_headers_stride,
                                          &rgn_headers_size);
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.rgn_hdr_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          rgn_headers_size * num_rt_datas,
                          ROGUE_CR_TE_PSGREGION_ADDR_BASE_ALIGNMENT,
                          PVR_BO_ALLOC_FLAG_GPU_UNCACHED,
@@ -483,7 +482,7 @@ pvr_rt_rgn_headers_data_init(struct pvr_device *device,
    if (result != VK_SUCCESS)
       return result;
 
-   dev_addr = rt_dataset->rgn_headers_bo->vma->dev_addr;
+   dev_addr = rt_dataset->rgn_headers_bo->dev_addr;
 
    for (uint32_t i = 0; i < num_rt_datas; i++) {
       rt_dataset->rt_datas[i].rgn_headers_dev_addr = dev_addr;

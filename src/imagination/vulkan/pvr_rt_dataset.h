@@ -47,7 +47,7 @@ struct pvr_rt_dataset {
    struct pvr_bo *mta_bo;
    struct pvr_suballoc_bo *mlist_bo;
 
-   struct pvr_bo *rgn_headers_bo;
+   struct pvr_suballoc_bo *rgn_headers_bo;
    uint64_t rgn_headers_stride;
 
    bool need_frag;

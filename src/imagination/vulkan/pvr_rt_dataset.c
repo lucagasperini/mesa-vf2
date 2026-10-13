@@ -14,7 +14,7 @@ static void pvr_rt_rgn_headers_data_fini(struct pvr_rt_dataset *rt_dataset)
    for (uint32_t i = 0; i < ARRAY_SIZE(rt_dataset->rt_datas); i++)
       rt_dataset->rt_datas[i].rgn_headers_dev_addr = PVR_DEV_ADDR_INVALID;
 
-   pvr_bo_free(rt_dataset->device, rt_dataset->rgn_headers_bo);
+   pvr_bo_suballoc_free(rt_dataset->rgn_headers_bo);
    rt_dataset->rgn_headers_bo = NULL;
 }
 
