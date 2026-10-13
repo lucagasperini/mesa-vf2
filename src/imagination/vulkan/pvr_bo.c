@@ -61,6 +61,7 @@
 
 #define PVR_BO_SUBALLOC_SLAB_MAX_SIZE 64*1024
 
+
 struct pvr_bo_store {
    struct rb_tree tree;
    simple_mtx_t mutex;
@@ -73,9 +74,10 @@ struct pvr_bo_store_entry {
 };
 
 enum pvr_slab_heap {
-    PVR_HEAP_NORMAL = 0,
-    PVR_HEAP_ZEROED = 1,
-    PVR_HEAP_COUNT = 2
+    PVR_SLAB_HEAP_CPU_ACCESS = 0,
+    PVR_SLAB_HEAP_GPU_UNCACHED = 1,
+    PVR_SLAB_HEAP_GPU_UNCACHED_PM_FW_ONLY = 2,
+    PVR_SLAB_HEAP_GPU_UNCACHED_CPU_ACCESS = 3,
 };
 
 #define entry_from_node(node_) \
@@ -546,7 +548,25 @@ pvr_bo_slab_alloc(void *priv,
    pvr_get_slc_cache_line_size(&allocator->device->pdevice->dev_info);
    uint32_t suballoc_size = ALIGN_POT(entry_size, cache_line_size);
    uint32_t num_entries = alloc_size / suballoc_size;
+   uint8_t flags = 0;
    VkResult result;
+
+   switch (heap) {
+      case PVR_SLAB_HEAP_CPU_ACCESS:
+         flags = PVR_BO_ALLOC_FLAG_CPU_MAPPED;
+         break;
+      case PVR_SLAB_HEAP_GPU_UNCACHED:
+         flags = PVR_BO_ALLOC_FLAG_GPU_UNCACHED;
+         break;
+      case PVR_SLAB_HEAP_GPU_UNCACHED_CPU_ACCESS:
+         flags = PVR_BO_ALLOC_FLAG_CPU_MAPPED | PVR_BO_ALLOC_FLAG_GPU_UNCACHED;
+         break;
+      case PVR_SLAB_HEAP_GPU_UNCACHED_PM_FW_ONLY:
+         flags = PVR_BO_ALLOC_FLAG_GPU_UNCACHED | PVR_SLAB_HEAP_GPU_UNCACHED_PM_FW_ONLY;
+         break;
+      default:
+         return NULL;
+   }
 
    bo = vk_alloc(&allocator->device->vk.alloc,
                           sizeof(*bo),
@@ -555,19 +575,17 @@ pvr_bo_slab_alloc(void *priv,
    if (!bo) 
       goto err_bo;
 
+
    result = pvr_bo_alloc(allocator->device,
                               allocator->heap,
                               alloc_size,
                               suballoc_size,
-                              PVR_BO_ALLOC_FLAG_CPU_MAPPED,
+                              flags,
                               &bo);
    if (result != VK_SUCCESS) {
             simple_mtx_unlock(&allocator->mtx);
             return NULL;
    }
-
-   if(heap == PVR_HEAP_ZEROED)
-      memset(bo->bo->map, 0, alloc_size);
 
    bo->suballoc = vk_alloc(&allocator->device->vk.alloc,
                           sizeof(struct pvr_suballoc_bo) * num_entries,
@@ -587,7 +605,6 @@ pvr_bo_slab_alloc(void *priv,
          bo, 
          suballoc_size, 
          suballoc_size * i);
-      tmp->never_used = true;
       tmp->entry.slab = &bo->slab;
       list_add(&(tmp->entry.head), &(bo->slab.free));
    }
@@ -646,7 +663,7 @@ void pvr_bo_suballocator_init(struct pvr_suballocator *allocator,
    pb_slabs_init(&allocator->slabs_manager, 
       6, 
       16,
-      PVR_HEAP_COUNT,
+      4,
       false,
       allocator, 
       pvr_bo_slab_reclaim, 
@@ -673,7 +690,7 @@ static VkResult
 pvr_bo_alloc_big(struct pvr_suballocator *allocator, 
                   uint32_t size,
                   uint32_t align,
-                  bool zero_on_alloc,
+                  uint8_t flags,
                   struct pvr_suballoc_bo **const suballoc_bo_out) 
 {
    struct pvr_bo *bo = NULL;
@@ -692,12 +709,12 @@ pvr_bo_alloc_big(struct pvr_suballocator *allocator,
                               allocator->heap,
                               alloc_size,
                               align,
-                              PVR_BO_ALLOC_FLAG_CPU_MAPPED,
+                              flags,
                               &bo);
    if (result != VK_SUCCESS)
       goto err_free;
 
-   if(zero_on_alloc)
+   if(flags & PVR_BO_ALLOC_FLAG_ZEROED)
       memset(bo->bo->map, 0, alloc_size);
 
    suballoc_bo = vk_alloc(&allocator->device->vk.alloc,
@@ -723,11 +740,45 @@ err_free:
    return vk_error(allocator->device, VK_ERROR_OUT_OF_HOST_MEMORY);
 }
 
+static uint8_t
+pvr_bo_suballoc_get_slab_heap(uint8_t flags) {
+   const uint8_t MASK_CLEAN_INPUT = PVR_BO_ALLOC_FLAG_CPU_ACCESS | 
+      PVR_BO_ALLOC_FLAG_GPU_UNCACHED | PVR_BO_ALLOC_FLAG_PM_FW_PROTECT;
+
+   const uint8_t MASK_CPU_ACCESS =  PVR_BO_ALLOC_FLAG_CPU_ACCESS;
+   const uint8_t MASK_GPU_ONLY_UNCACHED = PVR_BO_ALLOC_FLAG_GPU_UNCACHED;
+   const uint8_t MASK_GPU_UNCACHED_PM_FW_ONLY = 
+      PVR_BO_ALLOC_FLAG_GPU_UNCACHED | PVR_BO_ALLOC_FLAG_PM_FW_PROTECT;
+   const uint8_t MASK_GPU_UNCACHED_CPU_ACCESS =
+      PVR_BO_ALLOC_FLAG_CPU_ACCESS | PVR_BO_ALLOC_FLAG_GPU_UNCACHED;
+
+   // Clean from useless bit before check
+   flags = flags & MASK_CLEAN_INPUT;
+
+   // Invalid case: Fallback on cpu access
+   if(flags == 0) {
+      return PVR_SLAB_HEAP_CPU_ACCESS;
+   }
+
+   if((flags & ~MASK_CPU_ACCESS) == 0) { 
+      return PVR_SLAB_HEAP_CPU_ACCESS;
+   } else if ((flags & ~MASK_GPU_ONLY_UNCACHED) == 0) {
+      return PVR_SLAB_HEAP_GPU_UNCACHED;
+   } else if ((flags & ~MASK_GPU_UNCACHED_PM_FW_ONLY) == 0) {
+      return PVR_SLAB_HEAP_GPU_UNCACHED_PM_FW_ONLY;
+   } else if((flags & ~MASK_GPU_UNCACHED_CPU_ACCESS) == 0) {
+      return PVR_SLAB_HEAP_GPU_UNCACHED_CPU_ACCESS;
+   } else {
+      // Invalid case: Fallback on cpu access
+      return PVR_SLAB_HEAP_CPU_ACCESS;
+   }
+}
+
 static VkResult
 pvr_bo_alloc_slab(struct pvr_suballocator *allocator,
                          uint32_t size,
                          uint32_t align,
-                         bool zero_on_alloc,
+                         uint8_t flags,
                          struct pvr_suballoc_bo **const suballoc_bo_out) 
 {
    struct pb_slab_entry* entry = NULL;
@@ -736,7 +787,7 @@ pvr_bo_alloc_slab(struct pvr_suballocator *allocator,
    entry = pb_slab_alloc_reclaimed(
          &allocator->slabs_manager, 
          size, 
-         zero_on_alloc ? PVR_HEAP_ZEROED : PVR_HEAP_NORMAL, 
+         pvr_bo_suballoc_get_slab_heap(flags), 
          false);
       if(!entry) {
          mesa_loge("Cannot alloc slab");
@@ -744,12 +795,11 @@ pvr_bo_alloc_slab(struct pvr_suballocator *allocator,
       }
 
       suballoc = container_of(entry, struct pvr_suballoc_bo, entry);
-      if(!suballoc->never_used && zero_on_alloc) {
-         memset(suballoc->bo->bo->map, 0, suballoc->size);
+      if(flags & PVR_BO_ALLOC_FLAG_ZEROED) {
+         memset(pvr_bo_suballoc_get_map_addr(suballoc), 0, suballoc->size);
       }
 
       p_atomic_inc(&suballoc->bo->ref_count);
-      suballoc->never_used = true;
       *suballoc_bo_out = suballoc;
       simple_mtx_unlock(&allocator->mtx);
       return VK_SUCCESS;
@@ -774,20 +824,23 @@ VkResult
 pvr_bo_suballoc(struct pvr_suballocator *allocator,
                          uint32_t size,
                          uint32_t align,
-                         bool zero_on_alloc,
+                         uint8_t flags,
                          struct pvr_suballoc_bo **const suballoc_bo_out)
 { 
+   if(flags & PVR_BO_ALLOC_FLAG_CPU_MAPPED)
+      flags |= PVR_BO_ALLOC_FLAG_CPU_ACCESS;
+
    if(size <= PVR_BO_SUBALLOC_SLAB_MAX_SIZE) {
       return pvr_bo_alloc_slab(allocator,
          size, 
          align, 
-         zero_on_alloc, 
+         flags, 
          suballoc_bo_out);
    } else {
       return pvr_bo_alloc_big(allocator,
          size, 
          align, 
-         zero_on_alloc, 
+         flags, 
          suballoc_bo_out);
    }
 }

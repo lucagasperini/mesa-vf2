@@ -189,7 +189,7 @@ VkResult pvr_emit_ppp_from_template(
    result = pvr_bo_suballoc(&device->suballoc_general,
                             PVR_DW_TO_BYTES(dword_count),
                             cache_line_size,
-                            false,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                             &pvr_bo);
    if (result != VK_SUCCESS) {
       *pvr_bo_out = NULL;
@@ -290,7 +290,7 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
    result = pvr_bo_suballoc(&device->suballoc_usc,
                             alloc_size,
                             4,
-                            false,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                             &clear_state->usc_clear_attachment_programs);
    if (result != VK_SUCCESS)
       return result;
@@ -354,7 +354,7 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
    result = pvr_bo_suballoc(&device->suballoc_pds,
                             alloc_size,
                             pds_prog_alignment,
-                            false,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                             &clear_state->pds_clear_attachment_programs);
    if (result != VK_SUCCESS) {
       pvr_bo_suballoc_free(clear_state->usc_clear_attachment_programs);

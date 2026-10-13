@@ -87,7 +87,7 @@ VkResult pvr_CreateQueryPool(VkDevice _device,
    result = pvr_bo_suballoc(&device->suballoc_vis_test,
                             alloc_size,
                             ROGUE_OQUERY_ALIGN,
-                            false,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                             &pool->result_buffer);
    if (result != VK_SUCCESS)
       goto err_free_pool;
@@ -95,7 +95,7 @@ VkResult pvr_CreateQueryPool(VkDevice _device,
    result = pvr_bo_suballoc(&device->suballoc_general,
                             query_size,
                             sizeof(uint32_t),
-                            false,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                             &pool->availability_buffer);
    if (result != VK_SUCCESS)
       goto err_free_result_buffer;

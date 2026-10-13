@@ -125,7 +125,7 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
    result = pvr_bo_suballoc(&csb->device->suballoc_general,
                          PVR_CMD_BUFFER_CSB_BO_SIZE,
                          cache_line_size,
-                         false,
+                         PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                          &pvr_bo);
    if (result != VK_SUCCESS) {
       vk_error(csb->device, result);

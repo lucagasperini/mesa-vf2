@@ -837,7 +837,11 @@ VkResult pvr_gpu_upload(struct pvr_device *device,
    else
       UNREACHABLE("Unknown heap type");
 
-   result = pvr_bo_suballoc(allocator, size, alignment, false, &suballoc_bo);
+   result = pvr_bo_suballoc(allocator, 
+      size, 
+      alignment, 
+      PVR_BO_ALLOC_FLAG_CPU_MAPPED,
+      &suballoc_bo);
    if (result != VK_SUCCESS)
       return result;
 
@@ -869,7 +873,7 @@ VkResult pvr_gpu_upload_usc(struct pvr_device *device,
    result = pvr_bo_suballoc(&device->suballoc_usc,
                             code_size + ROGUE_MAX_INSTR_BYTES,
                             code_alignment,
-                            false,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                             &suballoc_bo);
    if (result != VK_SUCCESS)
       return result;
@@ -930,7 +934,7 @@ VkResult pvr_gpu_upload_pds(struct pvr_device *device,
    result = pvr_bo_suballoc(&device->suballoc_pds,
                             bo_size,
                             bo_alignment,
-                            true,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED | PVR_BO_ALLOC_FLAG_ZEROED,
                             &pds_upload_out->pvr_bo);
    if (result != VK_SUCCESS)
       return result;

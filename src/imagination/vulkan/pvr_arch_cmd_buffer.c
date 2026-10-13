@@ -2823,7 +2823,11 @@ pvr_arch_cmd_buffer_alloc_mem(struct pvr_cmd_buffer *cmd_buffer,
       UNREACHABLE("Unknown heap type");
 
    result =
-      pvr_bo_suballoc(allocator, size, cache_line_size, false, &suballoc_bo);
+      pvr_bo_suballoc(allocator, 
+         size, 
+         cache_line_size, 
+         PVR_BO_ALLOC_FLAG_CPU_MAPPED, 
+         &suballoc_bo);
    if (result != VK_SUCCESS)
       return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
 

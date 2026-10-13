@@ -131,7 +131,7 @@ VkResult pvr_arch_device_init_spm_load_state(struct pvr_device *device)
    result = pvr_bo_suballoc(&device->suballoc_usc,
                             usc_allocation_size,
                             4,
-                            false,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                             &usc_bo);
    if (result != VK_SUCCESS)
       return result;
@@ -190,7 +190,7 @@ VkResult pvr_arch_device_init_spm_load_state(struct pvr_device *device)
    result = pvr_bo_suballoc(&device->suballoc_pds,
                             pds_allocation_size,
                             16,
-                            false,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                             &pds_bo);
    if (result != VK_SUCCESS) {
       pvr_bo_suballoc_free(usc_bo);

@@ -92,7 +92,6 @@ struct pvr_suballoc_bo {
    uint32_t offset;
    uint32_t size;
    bool can_reclaim;
-   bool never_used;
 
    struct pb_slab_entry entry;
 };
@@ -120,6 +119,8 @@ struct pvr_suballoc_bo {
  */
 #define PVR_BO_ALLOC_FLAG_PM_FW_PROTECT BITFIELD_BIT(3U)
 
+#define PVR_BO_ALLOC_FLAG_ZEROED BITFIELD_BIT(4U)
+
 VkResult pvr_bo_alloc(struct pvr_device *device,
                       struct pvr_winsys_heap *heap,
                       uint64_t size,
@@ -138,7 +139,7 @@ void pvr_bo_suballocator_fini(struct pvr_suballocator *suballoc);
 VkResult pvr_bo_suballoc(struct pvr_suballocator *allocator,
                          uint32_t size,
                          uint32_t alignment,
-                         bool zero_on_alloc,
+                         uint8_t flags,
                          struct pvr_suballoc_bo **const suballoc_bo_out);
 void pvr_bo_suballoc_free(struct pvr_suballoc_bo *suballoc_bo);
 void *pvr_bo_suballoc_get_map_addr(const struct pvr_suballoc_bo *suballoc_bo);

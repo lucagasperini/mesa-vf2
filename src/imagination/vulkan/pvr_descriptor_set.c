@@ -301,7 +301,7 @@ VkResult pvr_CreateDescriptorPool(VkDevice _device,
    result = pvr_bo_suballoc(&device->suballoc_general,
                             bo_size,
                             cache_line_size,
-                            false,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
                             &pool->pvr_bo);
 
    if (result != VK_SUCCESS)

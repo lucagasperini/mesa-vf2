@@ -121,7 +121,7 @@ VkResult pvr_free_list_create(struct pvr_device *device,
                          device->heaps.general_heap,
                          size,
                          addr_alignment,
-                         bo_flags,
+                         bo_flags, // can we create a heap on suballoc for this flag set?
                          &free_list->bo);
    if (result != VK_SUCCESS)
       goto err_vk_free_free_list;
