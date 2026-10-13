@@ -61,7 +61,6 @@
 
 #define PVR_BO_SUBALLOC_SLAB_MAX_SIZE 64*1024
 
-
 struct pvr_bo_store {
    struct rb_tree tree;
    simple_mtx_t mutex;
@@ -575,7 +574,6 @@ pvr_bo_slab_alloc(void *priv,
    if (!bo) 
       goto err_bo;
 
-
    result = pvr_bo_alloc(allocator->device,
                               allocator->heap,
                               alloc_size,
@@ -827,8 +825,14 @@ pvr_bo_suballoc(struct pvr_suballocator *allocator,
                          uint8_t flags,
                          struct pvr_suballoc_bo **const suballoc_bo_out)
 { 
+   // NOTE: We are using mapped and access interchangeably, 
+   // even though they are not, but they will always be mapped
    if(flags & PVR_BO_ALLOC_FLAG_CPU_MAPPED)
       flags |= PVR_BO_ALLOC_FLAG_CPU_ACCESS;
+
+   if(flags & PVR_BO_ALLOC_FLAG_CPU_ACCESS)
+      flags |= PVR_BO_ALLOC_FLAG_CPU_MAPPED;
+
 
    if(size <= PVR_BO_SUBALLOC_SLAB_MAX_SIZE) {
       return pvr_bo_alloc_slab(allocator,
