@@ -19,7 +19,7 @@ struct pvr_free_list {
 
    uint64_t size;
 
-   struct pvr_bo *bo;
+   struct pvr_suballoc_bo *bo;
 
    struct pvr_winsys_free_list *ws_free_list;
 };

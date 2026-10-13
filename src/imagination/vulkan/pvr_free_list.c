@@ -117,17 +117,20 @@ VkResult pvr_free_list_create(struct pvr_device *device,
    /* FIXME: The memory is mapped GPU uncached, but this seems to contradict
     * the comment above about aligning to the SLC cache line size.
     */
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          size,
                          addr_alignment,
-                         bo_flags, // can we create a heap on suballoc for this flag set?
+                         bo_flags,
                          &free_list->bo);
    if (result != VK_SUCCESS)
       goto err_vk_free_free_list;
 
+   /* FIXME: This is an hack for PowerVR rogue, we should generalize it */
+   struct pvr_winsys_vma hack_vma;
+   hack_vma.dev_addr.addr = free_list->bo->dev_addr.addr;
+
    result = device->ws->ops->free_list_create(device->ws,
-                                              free_list->bo->vma,
+                                              &hack_vma,
                                               initial_num_pages,
                                               max_num_pages,
                                               grow_num_pages,
@@ -145,7 +148,7 @@ VkResult pvr_free_list_create(struct pvr_device *device,
    return VK_SUCCESS;
 
 err_pvr_bo_free_bo:
-   pvr_bo_free(device, free_list->bo);
+   pvr_bo_suballoc_free(free_list->bo);
 
 err_vk_free_free_list:
    vk_free(&device->vk.alloc, free_list);
@@ -158,6 +161,6 @@ void pvr_free_list_destroy(struct pvr_free_list *free_list)
    struct pvr_device *device = free_list->device;
 
    device->ws->ops->free_list_destroy(free_list->ws_free_list);
-   pvr_bo_free(device, free_list->bo);
+   pvr_bo_suballoc_free(free_list->bo);
    vk_free(&device->vk.alloc, free_list);
 }
