@@ -41,7 +41,7 @@
 struct pvr_reset_cmd {};
 
 struct rogue_sr_programs {
-   struct pvr_bo *store_load_state_bo;
+   struct pvr_suballoc_bo *store_load_state_bo;
 
    struct {
       uint8_t unified_size;

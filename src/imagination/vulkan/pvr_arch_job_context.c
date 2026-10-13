@@ -484,8 +484,7 @@ static VkResult pvr_ctx_sr_programs_setup(struct pvr_device *device,
    sr_programs->usc.unified_size =
       DIV_ROUND_UP(64, ROGUE_VDMCTRL_PDS_STATE0_USC_UNIFIED_SIZE_UNIT_SIZE);
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.pds_heap,
+   result = pvr_bo_suballoc(&device->suballoc_pds,
                          store_load_state_bo_size,
                          cache_line_size,
                          PVR_WINSYS_BO_FLAG_CPU_ACCESS,
@@ -545,7 +544,7 @@ static VkResult pvr_ctx_sr_programs_setup(struct pvr_device *device,
          device,
          usc_store_program_upload_offset,
          store_temps,
-         sr_programs->store_load_state_bo->vma->dev_addr,
+         sr_programs->store_load_state_bo->dev_addr,
          &sr_programs->pds.store_program);
       if (result != VK_SUCCESS)
          goto err_free_usc_load_program_bo;
@@ -555,7 +554,7 @@ static VkResult pvr_ctx_sr_programs_setup(struct pvr_device *device,
          device,
          usc_load_program_upload_offset,
          load_temps,
-         sr_programs->store_load_state_bo->vma->dev_addr,
+         sr_programs->store_load_state_bo->dev_addr,
          &sr_programs->pds.load_program);
       if (result != VK_SUCCESS)
          goto err_free_pds_store_program_bo;
@@ -569,7 +568,7 @@ static VkResult pvr_ctx_sr_programs_setup(struct pvr_device *device,
          false,
          usc_store_program_upload_offset,
          store_temps,
-         sr_programs->store_load_state_bo->vma->dev_addr,
+         sr_programs->store_load_state_bo->dev_addr,
          &sr_programs->pds.store_program);
       if (result != VK_SUCCESS)
          goto err_free_usc_load_program_bo;
@@ -580,7 +579,7 @@ static VkResult pvr_ctx_sr_programs_setup(struct pvr_device *device,
          true,
          usc_load_program_upload_offset,
          load_temps,
-         sr_programs->store_load_state_bo->vma->dev_addr,
+         sr_programs->store_load_state_bo->dev_addr,
          &sr_programs->pds.load_program);
       if (result != VK_SUCCESS)
          goto err_free_pds_store_program_bo;
@@ -604,7 +603,7 @@ err_free_usc_store_program_bo:
    pvr_bo_suballoc_free(sr_programs->usc.store_program_bo);
 
 err_free_store_load_state_bo:
-   pvr_bo_free(device, sr_programs->store_load_state_bo);
+   pvr_bo_suballoc_free(sr_programs->store_load_state_bo);
 
    return result;
 }
@@ -616,7 +615,7 @@ static void pvr_ctx_sr_programs_cleanup(struct pvr_device *device,
    pvr_bo_suballoc_free(sr_programs->pds.store_program.pvr_bo);
    pvr_bo_suballoc_free(sr_programs->usc.load_program_bo);
    pvr_bo_suballoc_free(sr_programs->usc.store_program_bo);
-   pvr_bo_free(device, sr_programs->store_load_state_bo);
+   pvr_bo_suballoc_free( sr_programs->store_load_state_bo);
 }
 
 static VkResult
