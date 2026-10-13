@@ -561,7 +561,7 @@ pvr_bo_slab_alloc(void *priv,
          flags = PVR_BO_ALLOC_FLAG_CPU_MAPPED | PVR_BO_ALLOC_FLAG_GPU_UNCACHED;
          break;
       case PVR_SLAB_HEAP_GPU_UNCACHED_PM_FW_ONLY:
-         flags = PVR_BO_ALLOC_FLAG_GPU_UNCACHED | PVR_SLAB_HEAP_GPU_UNCACHED_PM_FW_ONLY;
+         flags = PVR_BO_ALLOC_FLAG_GPU_UNCACHED | PVR_BO_ALLOC_FLAG_PM_FW_PROTECT;
          break;
       default:
          return NULL;
