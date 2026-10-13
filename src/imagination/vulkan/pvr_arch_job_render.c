@@ -225,8 +225,7 @@ static VkResult pvr_rt_vheap_rtc_data_init(struct pvr_device *device,
    alignment = MAX2(ROGUE_CR_PM_VHEAP_TABLE_BASE_ADDR_ALIGNMENT,
                     ROGUE_CR_TA_RTC_ADDR_BASE_ALIGNMENT);
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          vheap_size + rtc_size,
                          alignment,
                          PVR_BO_ALLOC_FLAG_GPU_UNCACHED,
@@ -234,7 +233,7 @@ static VkResult pvr_rt_vheap_rtc_data_init(struct pvr_device *device,
    if (result != VK_SUCCESS)
       return result;
 
-   rt_dataset->vheap_dev_addr = rt_dataset->vheap_rtc_bo->vma->dev_addr;
+   rt_dataset->vheap_dev_addr = rt_dataset->vheap_rtc_bo->dev_addr;
 
    if (rtc_size > 0) {
       rt_dataset->rtc_dev_addr =
@@ -305,8 +304,7 @@ static VkResult pvr_rt_tpc_data_init(struct pvr_device *device,
                                    &rt_dataset->tpc_size);
    tpc_size = ALIGN_POT(rt_dataset->tpc_size, ROGUE_TE_TPC_CACHE_LINE_SIZE);
 
-   return pvr_bo_alloc(device,
-                       device->heaps.general_heap,
+   return pvr_bo_suballoc(&device->suballoc_general,
                        tpc_size,
                        ROGUE_CR_TE_TPC_ADDR_BASE_ALIGNMENT,
                        PVR_BO_ALLOC_FLAG_GPU_UNCACHED,
@@ -440,9 +438,7 @@ pvr_rt_mlist_data_init(struct pvr_device *device,
 
    /* No known cores where the Mlist size could be 0 */
    assert(mlist_size > 0);
-
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          mlist_size * num_rt_datas,
                          ROGUE_CR_PM_MTILE_ARRAY_BASE_ADDR_ALIGNMENT,
                          PVR_BO_ALLOC_FLAG_GPU_UNCACHED |
@@ -451,7 +447,7 @@ pvr_rt_mlist_data_init(struct pvr_device *device,
    if (result != VK_SUCCESS)
       return result;
 
-   dev_addr = rt_dataset->mlist_bo->vma->dev_addr;
+   dev_addr = rt_dataset->mlist_bo->dev_addr;
 
    for (uint32_t i = 0; i < num_rt_datas; i++) {
       rt_dataset->rt_datas[i].mlist_dev_addr = dev_addr;
@@ -591,7 +587,7 @@ static void pvr_rt_dataset_ws_create_info_init(
    create_info->vheap_table_dev_addr = rt_dataset->vheap_dev_addr;
    create_info->rtc_dev_addr = rt_dataset->rtc_dev_addr;
 
-   create_info->tpc_dev_addr = rt_dataset->tpc_bo->vma->dev_addr;
+   create_info->tpc_dev_addr = rt_dataset->tpc_bo->dev_addr;
    create_info->tpc_stride = rt_dataset->tpc_stride;
    create_info->tpc_size = rt_dataset->tpc_size;
 

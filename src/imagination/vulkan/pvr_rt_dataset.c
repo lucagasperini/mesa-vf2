@@ -23,7 +23,7 @@ void pvr_rt_mlist_data_fini(struct pvr_rt_dataset *rt_dataset)
    for (uint32_t i = 0; i < ARRAY_SIZE(rt_dataset->rt_datas); i++)
       rt_dataset->rt_datas[i].mlist_dev_addr = PVR_DEV_ADDR_INVALID;
 
-   pvr_bo_free(rt_dataset->device, rt_dataset->mlist_bo);
+   pvr_bo_suballoc_free(rt_dataset->mlist_bo);
    rt_dataset->mlist_bo = NULL;
 }
 
@@ -48,7 +48,7 @@ void pvr_rt_datas_fini(struct pvr_rt_dataset *rt_dataset)
 
 void pvr_rt_tpc_data_fini(struct pvr_rt_dataset *rt_dataset)
 {
-   pvr_bo_free(rt_dataset->device, rt_dataset->tpc_bo);
+   pvr_bo_suballoc_free(rt_dataset->tpc_bo);
    rt_dataset->tpc_bo = NULL;
 }
 
@@ -56,7 +56,7 @@ void pvr_rt_vheap_rtc_data_fini(struct pvr_rt_dataset *rt_dataset)
 {
    rt_dataset->rtc_dev_addr = PVR_DEV_ADDR_INVALID;
 
-   pvr_bo_free(rt_dataset->device, rt_dataset->vheap_rtc_bo);
+   pvr_bo_suballoc_free(rt_dataset->vheap_rtc_bo);
    rt_dataset->vheap_rtc_bo = NULL;
 }
 

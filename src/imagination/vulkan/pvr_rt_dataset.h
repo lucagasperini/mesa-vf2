@@ -33,11 +33,11 @@ struct pvr_rt_dataset {
    struct pvr_free_list *global_free_list;
    struct pvr_free_list *local_free_list;
 
-   struct pvr_bo *vheap_rtc_bo;
+   struct pvr_suballoc_bo *vheap_rtc_bo;
    pvr_dev_addr_t vheap_dev_addr;
    pvr_dev_addr_t rtc_dev_addr;
 
-   struct pvr_bo *tpc_bo;
+   struct pvr_suballoc_bo *tpc_bo;
    uint64_t tpc_stride;
    uint64_t tpc_size;
 
@@ -45,7 +45,7 @@ struct pvr_rt_dataset {
 
    /* RT data information */
    struct pvr_bo *mta_bo;
-   struct pvr_bo *mlist_bo;
+   struct pvr_suballoc_bo *mlist_bo;
 
    struct pvr_bo *rgn_headers_bo;
    uint64_t rgn_headers_stride;
