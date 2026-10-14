@@ -130,15 +130,14 @@ VkResult pvr_device_tile_buffer_ensure_cap(struct pvr_device *device,
     * allocations.
     */
    for (uint32_t i = tile_buffer_state->buffer_count; i < capacity; i++) {
-      result = pvr_bo_alloc(device,
-                            device->heaps.general_heap,
+      result = pvr_bo_suballoc(&device->suballoc_general,
                             size_in_bytes,
                             cache_line_size,
                             0,
                             &tile_buffer_state->buffers[i]);
       if (result != VK_SUCCESS) {
          for (uint32_t j = tile_buffer_state->buffer_count; j < i; j++)
-            pvr_bo_free(device, tile_buffer_state->buffers[j]);
+            pvr_bo_suballoc_free(tile_buffer_state->buffers[j]);
 
          goto err_release_lock;
       }

@@ -47,7 +47,7 @@
 
 struct pvr_transfer_frag_store_entry_data {
    pvr_dev_addr_t kick_usc_pds_offset;
-   struct pvr_bo *kick_usc_pds_upload;
+   struct pvr_suballoc_bo *kick_usc_pds_upload;
 
    struct pvr_suballoc_bo *usc_upload;
    struct pvr_tq_frag_sh_reg_layout sh_reg_layout;
@@ -242,6 +242,7 @@ static VkResult pvr_transfer_frag_store_entry_data_create(
    struct pvr_transfer_frag_store_entry_data *entry_data;
    pvr_dev_addr_t dev_addr;
    uint32_t num_usc_temps;
+   void* map;
    VkResult result;
 
    entry_data = ralloc(store->hash_table, __typeof__(*entry_data));
@@ -267,8 +268,7 @@ static VkResult pvr_transfer_frag_store_entry_data_create(
 
    pvr_pds_kick_usc(&kick_usc_pds_prog, NULL, 0U, false, PDS_GENERATE_SIZES);
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.pds_heap,
+   result = pvr_bo_suballoc(&device->suballoc_pds,
                          PVR_DW_TO_BYTES(kick_usc_pds_prog.data_size +
                                          kick_usc_pds_prog.code_size),
                          16,
@@ -277,13 +277,14 @@ static VkResult pvr_transfer_frag_store_entry_data_create(
    if (result != VK_SUCCESS)
       goto err_free_usc_upload;
 
+   map = pvr_bo_suballoc_get_map_addr(entry_data->kick_usc_pds_upload);
    pvr_pds_kick_usc(&kick_usc_pds_prog,
-                    entry_data->kick_usc_pds_upload->bo->map,
+                    map,
                     0U,
                     false,
                     PDS_GENERATE_CODEDATA_SEGMENTS);
 
-   dev_addr = entry_data->kick_usc_pds_upload->vma->dev_addr;
+   dev_addr = entry_data->kick_usc_pds_upload->dev_addr;
    dev_addr.addr -= device->heaps.pds_heap->base_addr.addr;
    entry_data->kick_usc_pds_offset = dev_addr;
 
@@ -304,7 +305,7 @@ static void inline pvr_transfer_frag_store_entry_data_destroy_no_ralloc_free(
    struct pvr_device *device,
    const struct pvr_transfer_frag_store_entry_data *entry_data)
 {
-   pvr_bo_free(device, entry_data->kick_usc_pds_upload);
+   pvr_bo_suballoc_free(entry_data->kick_usc_pds_upload);
    pvr_bo_suballoc_free(entry_data->usc_upload);
 }
 

@@ -86,7 +86,7 @@ static void pvr_ctx_reset_cmd_fini(struct pvr_device *device,
 
 static VkResult pvr_pds_pt_store_program_create_and_upload(
    struct pvr_device *device,
-   struct pvr_bo *pt_bo,
+   struct pvr_suballoc_bo *pt_bo,
    uint32_t pt_bo_size,
    struct pvr_pds_upload *const pds_upload_out)
 {
@@ -103,7 +103,7 @@ static VkResult pvr_pds_pt_store_program_create_and_upload(
    assert(pt_bo_size % 4 == 0);
 
    program.pds_persistent_temp_size_to_store = pt_bo_size / 4;
-   program.dev_address_for_storing_persistent_temp = pt_bo->vma->dev_addr.addr;
+   program.dev_address_for_storing_persistent_temp = pt_bo->dev_addr.addr;
 
    pvr_pds_generate_stream_out_terminate_program(&program,
                                                  NULL,
@@ -155,7 +155,7 @@ static VkResult pvr_pds_pt_store_program_create_and_upload(
 
 static VkResult pvr_pds_pt_resume_program_create_and_upload(
    struct pvr_device *device,
-   struct pvr_bo *pt_bo,
+   struct pvr_suballoc_bo *pt_bo,
    uint32_t pt_bo_size,
    struct pvr_pds_upload *const pds_upload_out)
 {
@@ -173,7 +173,7 @@ static VkResult pvr_pds_pt_resume_program_create_and_upload(
 
    program.num_buffers = 1;
    program.pds_buffer_data_size[0] = pt_bo_size / 4;
-   program.dev_address_for_buffer_data[0] = pt_bo->vma->dev_addr.addr;
+   program.dev_address_for_buffer_data[0] = pt_bo->dev_addr.addr;
 
    pvr_pds_generate_stream_out_init_program(&program,
                                             NULL,
@@ -232,8 +232,7 @@ pvr_render_job_pt_programs_setup(struct pvr_device *device,
 {
    VkResult result;
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.pds_heap,
+   result = pvr_bo_suballoc(&device->suballoc_pds,
                          ROGUE_LLS_PDS_PERSISTENT_TEMPS_BUFFER_SIZE,
                          ROGUE_LLS_PDS_PERSISTENT_TEMPS_BUFFER_ALIGNMENT,
                          PVR_BO_ALLOC_FLAG_CPU_ACCESS,
@@ -263,7 +262,7 @@ err_free_pds_store_program:
    pvr_bo_suballoc_free(pt_programs->pds_store_program.pvr_bo);
 
 err_free_store_resume_state_bo:
-   pvr_bo_free(device, pt_programs->store_resume_state_bo);
+   pvr_bo_suballoc_free(pt_programs->store_resume_state_bo);
 
    return result;
 }
@@ -274,7 +273,7 @@ pvr_render_job_pt_programs_cleanup(struct pvr_device *device,
 {
    pvr_bo_suballoc_free(pt_programs->pds_resume_program.pvr_bo);
    pvr_bo_suballoc_free(pt_programs->pds_store_program.pvr_bo);
-   pvr_bo_free(device, pt_programs->store_resume_state_bo);
+   pvr_bo_suballoc_free( pt_programs->store_resume_state_bo);
 }
 
 static void pvr_pds_ctx_sr_program_setup(
@@ -661,8 +660,7 @@ static VkResult pvr_render_ctx_switch_init(struct pvr_device *device,
    VkResult result;
    uint32_t i;
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          ROGUE_LLS_VDM_CONTEXT_RESUME_BUFFER_SIZE,
                          ROGUE_LLS_VDM_CONTEXT_RESUME_BUFFER_ALIGNMENT,
                          vdm_state_bo_flags,
@@ -670,8 +668,7 @@ static VkResult pvr_render_ctx_switch_init(struct pvr_device *device,
    if (result != VK_SUCCESS)
       return result;
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          ROGUE_LLS_TA_STATE_BUFFER_SIZE,
                          ROGUE_LLS_TA_STATE_BUFFER_ALIGNMENT,
                          geom_state_bo_flags,
@@ -692,10 +689,10 @@ err_programs_cleanup:
    for (uint32_t j = 0; j < i; j++)
       pvr_render_ctx_switch_programs_cleanup(device, &ctx_switch->programs[j]);
 
-   pvr_bo_free(device, ctx_switch->geom_state_bo);
+   pvr_bo_suballoc_free(ctx_switch->geom_state_bo);
 
 err_pvr_bo_free_vdm_state_bo:
-   pvr_bo_free(device, ctx_switch->vdm_state_bo);
+   pvr_bo_suballoc_free(ctx_switch->vdm_state_bo);
 
    return result;
 }
@@ -708,8 +705,8 @@ static void pvr_render_ctx_switch_fini(struct pvr_device *device,
    for (uint32_t i = 0; i < ARRAY_SIZE(ctx_switch->programs); i++)
       pvr_render_ctx_switch_programs_cleanup(device, &ctx_switch->programs[i]);
 
-   pvr_bo_free(device, ctx_switch->geom_state_bo);
-   pvr_bo_free(device, ctx_switch->vdm_state_bo);
+   pvr_bo_suballoc_free(ctx_switch->geom_state_bo);
+   pvr_bo_suballoc_free(ctx_switch->vdm_state_bo);
 }
 
 static void
@@ -776,12 +773,12 @@ static void pvr_render_ctx_ws_static_state_init(
 
    q_dst = &static_state->vdm_ctx_state_base_addr;
    pvr_csb_pack (q_dst, CR_VDM_CONTEXT_STATE_BASE, base) {
-      base.addr = ctx->ctx_switch.vdm_state_bo->vma->dev_addr;
+      base.addr = ctx->ctx_switch.vdm_state_bo->dev_addr;
    }
 
    q_dst = &static_state->geom_ctx_state_base_addr;
    pvr_csb_pack (q_dst, CR_TA_CONTEXT_STATE_BASE, base) {
-      base.addr = ctx->ctx_switch.geom_state_bo->vma->dev_addr;
+      base.addr = ctx->ctx_switch.geom_state_bo->dev_addr;
    }
 
    for (uint32_t i = 0; i < ARRAY_SIZE(ctx->ctx_switch.programs); i++) {
@@ -846,7 +843,7 @@ static void pvr_render_ctx_ws_create_info_init(
    struct pvr_winsys_render_ctx_create_info *create_info)
 {
    create_info->priority = priority;
-   create_info->vdm_callstack_addr = ctx->vdm_callstack_bo->vma->dev_addr;
+   create_info->vdm_callstack_addr = ctx->vdm_callstack_bo->dev_addr;
 
 #if defined(PVR_BUILD_ARCH_ROGUE)
    pvr_render_ctx_ws_static_state_init(ctx, &create_info->static_state.rogue);
@@ -874,8 +871,7 @@ VkResult pvr_arch_render_ctx_create(struct pvr_device *device,
 
    ctx->device = device;
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          vdm_callstack_size,
                          ROGUE_CR_VDM_CALL_STACK_POINTER_ADDR_ALIGNMENT,
                          0,
@@ -914,7 +910,7 @@ err_render_ctx_switch_fini:
    pvr_render_ctx_switch_fini(device, ctx);
 
 err_free_vdm_callstack_bo:
-   pvr_bo_free(device, ctx->vdm_callstack_bo);
+   pvr_bo_suballoc_free(ctx->vdm_callstack_bo);
 
 err_vk_free_ctx:
    vk_free(&device->vk.alloc, ctx);
@@ -930,7 +926,7 @@ void pvr_arch_render_ctx_destroy(struct pvr_render_ctx *ctx)
 
    pvr_ctx_reset_cmd_fini(device, &ctx->reset_cmd);
    pvr_render_ctx_switch_fini(device, ctx);
-   pvr_bo_free(device, ctx->vdm_callstack_bo);
+   pvr_bo_suballoc_free(ctx->vdm_callstack_bo);
    vk_free(&device->vk.alloc, ctx);
 }
 
@@ -1126,12 +1122,11 @@ VkResult pvr_arch_compute_ctx_create(struct pvr_device *const device,
 
    ctx->device = device;
 
-   result = pvr_bo_alloc(
-      device,
-      device->heaps.general_heap,
+   result = pvr_bo_suballoc(
+      &device->suballoc_general,
       rogue_get_cdm_context_resume_buffer_size(&device->pdevice->dev_info),
       rogue_get_cdm_context_resume_buffer_alignment(&device->pdevice->dev_info),
-      PVR_WINSYS_BO_FLAG_CPU_ACCESS | PVR_WINSYS_BO_FLAG_GPU_UNCACHED,
+      PVR_BO_ALLOC_FLAG_CPU_ACCESS | PVR_BO_ALLOC_FLAG_GPU_UNCACHED,
       &ctx->ctx_switch.compute_state_bo);
    if (result != VK_SUCCESS)
       goto err_free_ctx;
@@ -1187,7 +1182,7 @@ err_free_sr_programs:
       pvr_ctx_sr_programs_cleanup(device, &ctx->ctx_switch.sr[i]);
 
 err_free_state_buffer:
-   pvr_bo_free(device, ctx->ctx_switch.compute_state_bo);
+   pvr_bo_suballoc_free(ctx->ctx_switch.compute_state_bo);
 
 err_free_ctx:
    vk_free(&device->vk.alloc, ctx);
@@ -1207,7 +1202,7 @@ void pvr_arch_compute_ctx_destroy(struct pvr_compute_ctx *const ctx)
    for (uint32_t i = 0; i < ARRAY_SIZE(ctx->ctx_switch.sr); ++i)
       pvr_ctx_sr_programs_cleanup(device, &ctx->ctx_switch.sr[i]);
 
-   pvr_bo_free(device, ctx->ctx_switch.compute_state_bo);
+   pvr_bo_suballoc_free(ctx->ctx_switch.compute_state_bo);
 
    vk_free(&device->vk.alloc, ctx);
 }

@@ -10,6 +10,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "pvr_bo.h"
 #include "pvr_device.h"
 
 #include "vk_log.h"
@@ -392,8 +393,7 @@ static VkResult pvr_device_init_compute_idfwdf_state(struct pvr_device *device)
    if (result != VK_SUCCESS)
       return result;
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          PVR_IDFWDF_TEX_WIDTH * PVR_IDFWDF_TEX_HEIGHT *
                             vk_format_get_blocksize(PVR_IDFWDF_TEX_FORMAT),
                          4,
@@ -402,8 +402,7 @@ static VkResult pvr_device_init_compute_idfwdf_state(struct pvr_device *device)
    if (result != VK_SUCCESS)
       goto err_free_usc_program;
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          _PVR_IDFWDF_DATA_COUNT * ROGUE_REG_SIZE_BYTES,
                          ROGUE_REG_SIZE_BYTES,
                          PVR_BO_ALLOC_FLAG_CPU_MAPPED,
@@ -438,7 +437,7 @@ static VkResult pvr_device_init_compute_idfwdf_state(struct pvr_device *device)
                    PIPE_SWIZZLE_Y,
                    PIPE_SWIZZLE_Z,
                    PIPE_SWIZZLE_W },
-      .addr = device->idfwdf_state.store_bo->vma->dev_addr,
+      .addr = device->idfwdf_state.store_bo->dev_addr,
    };
 
    result = pvr_arch_pack_tex_state(device, &tex_info, &image_state);
@@ -446,7 +445,7 @@ static VkResult pvr_device_init_compute_idfwdf_state(struct pvr_device *device)
       goto err_free_shareds_buffer;
 
    /* Fill the shareds buffer. */
-   dword_ptr = (uint32_t *)device->idfwdf_state.shareds_bo->bo->map;
+   dword_ptr = pvr_bo_suballoc_get_map_addr(device->idfwdf_state.shareds_bo);
 
    memcpy(&dword_ptr[PVR_IDFWDF_DATA_TEX],
           image_state.words,
@@ -456,11 +455,12 @@ static VkResult pvr_device_init_compute_idfwdf_state(struct pvr_device *device)
           sizeof(sampler_state.words));
 
    dword_ptr[PVR_IDFWDF_DATA_ADDR_LO] =
-      device->idfwdf_state.store_bo->vma->dev_addr.addr & 0xffffffff;
+      device->idfwdf_state.store_bo->dev_addr.addr & 0xffffffff;
    dword_ptr[PVR_IDFWDF_DATA_ADDR_HI] =
-      device->idfwdf_state.store_bo->vma->dev_addr.addr >> 32;
+      device->idfwdf_state.store_bo->dev_addr.addr >> 32;
 
-   pvr_bo_cpu_unmap(device, device->idfwdf_state.shareds_bo);
+   // FIXME: Should we really unmap?
+   //pvr_bo_cpu_unmap(device, device->idfwdf_state.shareds_bo);
    dword_ptr = NULL;
 
    /* Generate and upload PDS programs. */
@@ -469,7 +469,7 @@ static VkResult pvr_device_init_compute_idfwdf_state(struct pvr_device *device)
       device->idfwdf_state.usc->dev_addr,
       _PVR_IDFWDF_DATA_COUNT,
       precomp_data->temps,
-      device->idfwdf_state.shareds_bo->vma->dev_addr,
+      device->idfwdf_state.shareds_bo->dev_addr,
       &device->idfwdf_state.pds,
       &device->idfwdf_state.sw_compute_barrier_pds);
 
@@ -479,10 +479,10 @@ static VkResult pvr_device_init_compute_idfwdf_state(struct pvr_device *device)
    return VK_SUCCESS;
 
 err_free_shareds_buffer:
-   pvr_bo_free(device, device->idfwdf_state.shareds_bo);
+   pvr_bo_suballoc_free(device->idfwdf_state.shareds_bo);
 
 err_free_store_buffer:
-   pvr_bo_free(device, device->idfwdf_state.store_bo);
+   pvr_bo_suballoc_free(device->idfwdf_state.store_bo);
 
 err_free_usc_program:
    pvr_bo_suballoc_free(device->idfwdf_state.usc);
@@ -494,8 +494,8 @@ static void pvr_device_finish_compute_idfwdf_state(struct pvr_device *device)
 {
    pvr_bo_suballoc_free(device->idfwdf_state.pds.pvr_bo);
    pvr_bo_suballoc_free(device->idfwdf_state.sw_compute_barrier_pds.pvr_bo);
-   pvr_bo_free(device, device->idfwdf_state.shareds_bo);
-   pvr_bo_free(device, device->idfwdf_state.store_bo);
+   pvr_bo_suballoc_free( device->idfwdf_state.shareds_bo);
+   pvr_bo_suballoc_free(device->idfwdf_state.store_bo);
    pvr_bo_suballoc_free(device->idfwdf_state.usc);
 }
 
@@ -698,8 +698,7 @@ static VkResult pvr_init_null_pages(struct pvr_device *device)
    /* TODO: make this read-only if we have a debug build so that we fault and
     * catch any writes.
     */
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          size,
                          4,
                          0,
@@ -709,8 +708,7 @@ static VkResult pvr_init_null_pages(struct pvr_device *device)
       return result;
 
    /* Create a null page for writes. */
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          size,
                          4,
                          0,
@@ -722,15 +720,15 @@ static VkResult pvr_init_null_pages(struct pvr_device *device)
    return VK_SUCCESS;
 
 err_free_zero_buffer:
-   pvr_bo_free(device, device->null_state.zero_bo);
+   pvr_bo_suballoc_free(device->null_state.zero_bo);
 
    return result;
 }
 
 static void pvr_finish_null_pages(struct pvr_device *device)
 {
-   pvr_bo_free(device, device->null_state.null_bo);
-   pvr_bo_free(device, device->null_state.zero_bo);
+   pvr_bo_suballoc_free(device->null_state.null_bo);
+   pvr_bo_suballoc_free(device->null_state.zero_bo);
 }
 
 VkResult PVR_PER_ARCH(create_device)(struct pvr_physical_device *pdevice,

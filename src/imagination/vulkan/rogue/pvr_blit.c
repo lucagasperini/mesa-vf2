@@ -1721,7 +1721,7 @@ static VkResult pvr_clear_color_attachment_static_create_consts_buffer(
 {
    struct pvr_device *device = cmd_buffer->device;
    struct pvr_suballoc_bo *const_shareds_buffer;
-   struct pvr_bo *tile_buffer;
+   struct pvr_suballoc_bo *tile_buffer;
    uint64_t tile_dev_addr = 0;
    uint32_t *buffer;
    VkResult result;
@@ -1747,7 +1747,7 @@ static VkResult pvr_clear_color_attachment_static_create_consts_buffer(
 
    if (uses_tile_buffer) {
       tile_buffer = device->tile_buffer_state.buffers[tile_buffer_idx];
-      tile_dev_addr = tile_buffer->vma->dev_addr.addr;
+      tile_dev_addr = tile_buffer->dev_addr.addr;
    }
 
    buffer[PVR_CLEAR_ATTACH_DATA_TILE_ADDR_LO] = tile_dev_addr & 0xffffffff;

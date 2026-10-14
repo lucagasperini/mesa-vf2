@@ -44,7 +44,7 @@ struct pvr_rt_dataset {
    struct pvr_winsys_rt_dataset *ws_rt_dataset;
 
    /* RT data information */
-   struct pvr_bo *mta_bo;
+   struct pvr_suballoc_bo *mta_bo;
    struct pvr_suballoc_bo *mlist_bo;
 
    struct pvr_suballoc_bo *rgn_headers_bo;
