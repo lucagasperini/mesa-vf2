@@ -680,6 +680,7 @@ static VkResult pvr_sub_cmd_gfx_build_terminate_ctrl_stream(
     * more memory than a single bo can provide.
     */
    assert(list_is_singular(&bo_list));
+   // FIXME: CHECK THIS it is bo?
    gfx_sub_cmd->terminate_ctrl_stream =
       list_first_entry(&bo_list, struct pvr_bo, link);
 
@@ -2376,6 +2377,7 @@ pvr_csb_gfx_build_view_index_ctrl_stream(struct pvr_device *const device,
       goto err_csb_finish;
 
    assert(list_is_singular(&bo_list));
+   // FIXME: CHECK THIS it is bo?
    *bo = list_first_entry(&bo_list, struct pvr_bo, link);
 
    /* This needs to be kept in sync with the instructions emitted above. */

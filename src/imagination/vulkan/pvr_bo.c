@@ -681,11 +681,18 @@ void pvr_bo_suballocator_init(struct pvr_suballocator *allocator,
 void pvr_bo_suballocator_fini(struct pvr_suballocator *allocator)
 {
    pb_slabs_deinit(&allocator->slabs_manager);
+   if(allocator->cache_bo) {
+      list_for_each_entry_safe(struct pvr_cache_bo, i, &allocator->cache_bo->link, link) {
+         assert(p_atomic_dec_zero(&bo->ref_count));
+         pvr_bo_free(allocator->device, i->bo->bo);
+         vk_free(&allocator->device->vk.alloc, i);
+      }
+   }
    simple_mtx_destroy(&allocator->mtx);
 }
 
 static VkResult
-pvr_bo_alloc_big(struct pvr_suballocator *allocator, 
+pvr_bo_alloc_cache_item(struct pvr_suballocator *allocator, 
                   uint32_t size,
                   uint32_t align,
                   uint8_t flags,
@@ -736,6 +743,65 @@ err_free:
    }
    simple_mtx_unlock(&allocator->mtx);
    return vk_error(allocator->device, VK_ERROR_OUT_OF_HOST_MEMORY);
+}
+
+static VkResult
+pvr_bo_alloc_cache(struct pvr_suballocator *allocator, 
+                  uint32_t size,
+                  uint32_t align,
+                  uint8_t flags,
+                  struct pvr_suballoc_bo **const suballoc_bo_out)
+{
+   struct pvr_cache_bo *cache_bo = NULL;
+   VkResult result;
+
+   if(size <= PVR_BO_SUBALLOC_SLAB_MAX_SIZE) {
+      return vk_error("Calling bo_alloc on slab", VK_ERROR_NOT_PERMITTED);
+   }
+
+   if(allocator->cache_bo) {
+      list_for_each_entry(struct pvr_cache_bo, i, &allocator->cache_bo->link, link) {
+         if(i->size >= size && i->bo->can_reclaim) {
+            i->bo->can_reclaim = false;
+            p_atomic_inc(&i->bo->bo->ref_count);
+            *suballoc_bo_out = i->bo;
+            return VK_SUCCESS;
+         }
+      }
+   }
+
+   cache_bo = vk_alloc(&allocator->device->vk.alloc,
+                        sizeof(struct pvr_cache_bo),
+                        8,
+                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if(!cache_bo)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   result = pvr_bo_alloc_cache_item(allocator, 
+            size, 
+            align, 
+            flags, 
+            &cache_bo->bo);
+   if (result != VK_SUCCESS)
+      goto err_free;
+
+   p_atomic_inc(&cache_bo->bo->bo->ref_count);
+   cache_bo->bo->can_reclaim = false;
+   *suballoc_bo_out = cache_bo->bo;
+   cache_bo->size = size;
+   
+   if(!allocator->cache_bo) {
+      allocator->cache_bo = cache_bo;
+      list_inithead(&allocator->cache_bo->link);
+   } else {
+      list_add(&cache_bo->link, &allocator->cache_bo->link);
+   }
+
+   return VK_SUCCESS;
+
+err_free:
+   vk_free(&allocator->device->vk.alloc, cache_bo);
+   return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 static uint8_t
@@ -841,7 +907,7 @@ pvr_bo_suballoc(struct pvr_suballocator *allocator,
          flags, 
          suballoc_bo_out);
    } else {
-      return pvr_bo_alloc_big(allocator,
+      return pvr_bo_alloc_cache(allocator,
          size, 
          align, 
          flags, 
@@ -869,8 +935,7 @@ void pvr_bo_suballoc_free(struct pvr_suballoc_bo *suballoc_bo)
          &suballoc_bo->entry);
       simple_mtx_unlock(&suballoc_bo->allocator->mtx);
    } else {
-      pvr_bo_free(suballoc_bo->allocator->device, suballoc_bo->bo);
-      vk_free(&suballoc_bo->allocator->device->vk.alloc, suballoc_bo);
+      suballoc_bo->can_reclaim = true;
    }
 }
 

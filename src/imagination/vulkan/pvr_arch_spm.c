@@ -30,11 +30,6 @@
 #include "vk_alloc.h"
 #include "vk_log.h"
 
-struct pvr_spm_scratch_buffer {
-   uint32_t ref_count;
-   struct pvr_bo *bo;
-   uint64_t size;
-};
 
 uint64_t pvr_arch_spm_scratch_buffer_calc_required_size(
    const struct pvr_renderpass_hwsetup_render *renders,
@@ -479,7 +474,7 @@ VkResult pvr_arch_spm_init_eot_state(
    VkResult result;
 
    pvr_dev_addr_t next_scratch_buffer_addr =
-      rstate->scratch_buffer->bo->vma->dev_addr;
+      rstate->scratch_buffer->bo->dev_addr;
    uint64_t mem_stored;
 
    /* TODO: See if instead of having a separate path for devices with 8 output
@@ -768,7 +763,7 @@ VkResult pvr_arch_spm_init_bgobj_state(
       .height = rstate->height,
    };
    pvr_dev_addr_t next_scratch_buffer_addr =
-      rstate->scratch_buffer->bo->vma->dev_addr;
+      rstate->scratch_buffer->bo->dev_addr;
    struct pvr_spm_per_load_program_state *load_program_state;
    struct pvr_pds_upload pds_texture_data_upload;
    struct pvr_sampler_descriptor *descriptor;

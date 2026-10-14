@@ -885,13 +885,12 @@ VkResult PVR_PER_ARCH(create_device)(struct pvr_physical_device *pdevice,
 
    pvr_device_init_default_sampler_state(device);
 
-   pvr_spm_init_scratch_buffer_store(device);
-
    result = pvr_init_robustness_buffer(device);
    if (result != VK_SUCCESS)
-      goto err_pvr_spm_finish_scratch_buffer_store;
+      goto err_pvr_robustness_buffer_finish;
 
    result = pvr_arch_border_color_table_init(device);
+   // FIXME: This seems surely wrong
    if (result != VK_SUCCESS)
       goto err_pvr_robustness_buffer_finish;
 
@@ -918,10 +917,7 @@ VkResult PVR_PER_ARCH(create_device)(struct pvr_physical_device *pdevice,
 
 err_pvr_robustness_buffer_finish:
    pvr_robustness_buffer_finish(device);
-
-err_pvr_spm_finish_scratch_buffer_store:
-   pvr_spm_finish_scratch_buffer_store(device);
-
+// FIXME: This is correct?
    pvr_arch_queues_destroy(device);
 
 err_pvr_finish_tile_buffer_state:
@@ -1005,7 +1001,6 @@ void PVR_PER_ARCH(destroy_device)(struct pvr_device *device,
 
    pvr_arch_border_color_table_finish(device);
    pvr_robustness_buffer_finish(device);
-   pvr_spm_finish_scratch_buffer_store(device);
    pvr_arch_queues_destroy(device);
    pvr_device_finish_tile_buffer_state(device);
    pvr_arch_device_finish_spm_load_state(device);
