@@ -63,6 +63,12 @@ struct pvr_bo {
    struct pvr_suballoc_bo *suballoc;
 };
 
+struct pvr_cache_bo {
+   struct list_head link;
+   struct pvr_suballoc_bo *bo;
+   uint32_t size;
+};
+
 struct pvr_suballocator {
    /* Pointer to the pvr_device this allocator is associated with */
    struct pvr_device *device;
@@ -75,6 +81,8 @@ struct pvr_suballocator {
    simple_mtx_t mtx;
 
    struct pb_slabs slabs_manager;
+
+   struct pvr_cache_bo *cache_bo;
 };
 
 struct pvr_suballoc_bo {

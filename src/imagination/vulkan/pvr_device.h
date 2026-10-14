@@ -135,7 +135,7 @@ struct pvr_device {
       uint32_t buffer_count;
    } tile_buffer_state;
 
-   struct pvr_spm_scratch_buffer_store spm_scratch_buffer_store;
+   struct pvr_spm_scratch_buffer spm_scratch_buffer;
 
    struct pvr_bo_store *bo_store;
 

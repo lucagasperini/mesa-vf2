@@ -44,8 +44,6 @@
 
 #include "hwdef/rogue_hw_defs.h"
 #include "pvr_limits.h"
-#include "pvr_macros.h"
-#include "util/simple_mtx.h"
 
 struct pvr_bo;
 struct pvr_device;
@@ -55,9 +53,10 @@ struct pvr_renderpass_hwsetup_render;
 struct pvr_render_state;
 struct pvr_spm_scratch_buffer;
 
-struct pvr_spm_scratch_buffer_store {
-   simple_mtx_t mtx;
-   struct pvr_spm_scratch_buffer *head_ref;
+struct pvr_spm_scratch_buffer {
+   uint32_t ref_count;
+   struct pvr_suballoc_bo *bo;
+   uint64_t size;
 };
 
 struct pvr_spm_eot_state {
@@ -83,8 +82,6 @@ struct pvr_spm_bgobj_state {
    uint64_t pds_reg_values[ROGUE_NUM_CR_PDS_BGRND_WORDS];
 };
 
-void pvr_spm_init_scratch_buffer_store(struct pvr_device *device);
-void pvr_spm_finish_scratch_buffer_store(struct pvr_device *device);
 
 VkResult pvr_spm_scratch_buffer_get_buffer(
    struct pvr_device *device,

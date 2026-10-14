@@ -40,39 +40,6 @@
 #include "vk_alloc.h"
 #include "vk_log.h"
 
-struct pvr_spm_scratch_buffer {
-   uint32_t ref_count;
-   struct pvr_bo *bo;
-   uint64_t size;
-};
-
-void pvr_spm_init_scratch_buffer_store(struct pvr_device *device)
-{
-   struct pvr_spm_scratch_buffer_store *store =
-      &device->spm_scratch_buffer_store;
-
-   simple_mtx_init(&store->mtx, mtx_plain);
-   store->head_ref = NULL;
-}
-
-void pvr_spm_finish_scratch_buffer_store(struct pvr_device *device)
-{
-   struct pvr_spm_scratch_buffer_store *store =
-      &device->spm_scratch_buffer_store;
-
-   /* Either a framebuffer was never created so no scratch buffer was ever
-    * created or all framebuffers have been freed so only the store's reference
-    * remains.
-    */
-   assert(!store->head_ref || p_atomic_read(&store->head_ref->ref_count) == 1);
-
-   simple_mtx_destroy(&store->mtx);
-
-   if (store->head_ref) {
-      pvr_bo_free(device, store->head_ref->bo);
-      vk_free(&device->vk.alloc, store->head_ref);
-   }
-}
 
 static VkResult
 pvr_spm_scratch_buffer_alloc(struct pvr_device *device,
@@ -82,11 +49,9 @@ pvr_spm_scratch_buffer_alloc(struct pvr_device *device,
    const uint32_t cache_line_size =
       pvr_get_slc_cache_line_size(&device->pdevice->dev_info);
    struct pvr_spm_scratch_buffer *scratch_buffer;
-   struct pvr_bo *bo;
+   struct pvr_suballoc_bo *bo;
    VkResult result;
-
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          size,
                          cache_line_size,
                          0,
@@ -101,7 +66,7 @@ pvr_spm_scratch_buffer_alloc(struct pvr_device *device,
                              4,
                              VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!scratch_buffer) {
-      pvr_bo_free(device, bo);
+      pvr_bo_suballoc_free(bo);
       *buffer_out = NULL;
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
@@ -116,95 +81,33 @@ pvr_spm_scratch_buffer_alloc(struct pvr_device *device,
    return VK_SUCCESS;
 }
 
-static void
-pvr_spm_scratch_buffer_release_locked(struct pvr_device *device,
-                                      struct pvr_spm_scratch_buffer *buffer)
-{
-   struct pvr_spm_scratch_buffer_store *store =
-      &device->spm_scratch_buffer_store;
-
-   simple_mtx_assert_locked(&store->mtx);
-
-   if (p_atomic_dec_zero(&buffer->ref_count)) {
-      pvr_bo_free(device, buffer->bo);
-      vk_free(&device->vk.alloc, buffer);
-   }
-}
 
 void pvr_spm_scratch_buffer_release(struct pvr_device *device,
                                     struct pvr_spm_scratch_buffer *buffer)
 {
-   struct pvr_spm_scratch_buffer_store *store =
-      &device->spm_scratch_buffer_store;
-
-   simple_mtx_lock(&store->mtx);
-
-   pvr_spm_scratch_buffer_release_locked(device, buffer);
-
-   simple_mtx_unlock(&store->mtx);
+   if (p_atomic_dec_zero(&buffer->ref_count)) {
+      pvr_bo_suballoc_free(buffer->bo);
+      vk_free(&device->vk.alloc, buffer);
+   }
 }
 
-static void pvr_spm_scratch_buffer_store_set_head_ref_locked(
-   struct pvr_spm_scratch_buffer_store *store,
-   struct pvr_spm_scratch_buffer *buffer)
-{
-   simple_mtx_assert_locked(&store->mtx);
-   assert(!store->head_ref);
-
-   p_atomic_inc(&buffer->ref_count);
-   store->head_ref = buffer;
-}
-
-static void pvr_spm_scratch_buffer_store_release_head_ref_locked(
-   struct pvr_device *device,
-   struct pvr_spm_scratch_buffer_store *store)
-{
-   simple_mtx_assert_locked(&store->mtx);
-
-   pvr_spm_scratch_buffer_release_locked(device, store->head_ref);
-
-   store->head_ref = NULL;
-}
 
 VkResult pvr_spm_scratch_buffer_get_buffer(
    struct pvr_device *device,
    uint64_t size,
    struct pvr_spm_scratch_buffer **const buffer_out)
 {
-   struct pvr_spm_scratch_buffer_store *store =
-      &device->spm_scratch_buffer_store;
    struct pvr_spm_scratch_buffer *buffer;
 
-   simple_mtx_lock(&store->mtx);
+   VkResult result;
 
-   /* When a render requires a PR the fw will wait for other renders to end,
-    * free the PB space, unschedule any other vert/frag jobs and solely run the
-    * PR on the whole device until completion.
-    * Thus we can safely use the same scratch buffer across multiple
-    * framebuffers as the scratch buffer is only used during PRs and only one PR
-    * can ever be executed at any one time.
-    */
-   if (store->head_ref && store->head_ref->size == size) {
-      buffer = store->head_ref;
-   } else {
-      VkResult result;
-
-      if (store->head_ref)
-         pvr_spm_scratch_buffer_store_release_head_ref_locked(device, store);
-
-      result = pvr_spm_scratch_buffer_alloc(device, size, &buffer);
-      if (result != VK_SUCCESS) {
-         simple_mtx_unlock(&store->mtx);
-         *buffer_out = NULL;
-
-         return result;
-      }
-
-      pvr_spm_scratch_buffer_store_set_head_ref_locked(store, buffer);
+   result = pvr_spm_scratch_buffer_alloc(device, size, &buffer);
+   if (result != VK_SUCCESS) {
+      *buffer_out = NULL;
+      return result;
    }
 
    p_atomic_inc(&buffer->ref_count);
-   simple_mtx_unlock(&store->mtx);
    *buffer_out = buffer;
 
    return VK_SUCCESS;
