@@ -72,7 +72,7 @@ pvr_submit_info_stream_init(struct pvr_compute_ctx *ctx,
    stream_ptr += pvr_cmd_length(CR_CDM_CTRL_STREAM_BASE);
 
    pvr_csb_pack ((uint64_t *)stream_ptr, CR_CDM_CONTEXT_STATE_BASE, state) {
-      state.addr = ctx_switch->compute_state_bo->vma->dev_addr;
+      state.addr = ctx_switch->compute_state_bo->dev_addr;
    }
    stream_ptr += pvr_cmd_length(CR_CDM_CONTEXT_STATE_BASE);
 

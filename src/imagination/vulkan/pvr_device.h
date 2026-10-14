@@ -104,9 +104,9 @@ struct pvr_device {
       struct pvr_suballoc_bo *usc;
 
       /* Buffer in which the IDF/WDF program performs store ops. */
-      struct pvr_bo *store_bo;
+      struct pvr_suballoc_bo *store_bo;
       /* Contains the initialization values for the shared registers. */
-      struct pvr_bo *shareds_bo;
+      struct pvr_suballoc_bo *shareds_bo;
 
       struct pvr_pds_upload pds;
       struct pvr_pds_upload sw_compute_barrier_pds;
@@ -131,7 +131,7 @@ struct pvr_device {
       simple_mtx_t mtx;
 
 #define PVR_MAX_TILE_BUFFER_COUNT 7U
-      struct pvr_bo *buffers[PVR_MAX_TILE_BUFFER_COUNT];
+      struct pvr_suballoc_bo *buffers[PVR_MAX_TILE_BUFFER_COUNT];
       uint32_t buffer_count;
    } tile_buffer_state;
 
@@ -139,13 +139,13 @@ struct pvr_device {
 
    struct pvr_bo_store *bo_store;
 
-   struct pvr_bo *robustness_buffer;
+   struct pvr_suballoc_bo *robustness_buffer;
 
    struct vk_sync *presignaled_sync;
 
    struct {
-      struct pvr_bo *zero_bo;
-      struct pvr_bo *null_bo;
+      struct pvr_suballoc_bo *zero_bo;
+      struct pvr_suballoc_bo *null_bo;
    } null_state;
 
    struct pvr_border_color_table *border_color_table;
@@ -180,7 +180,7 @@ VkResult pvr_device_tile_buffer_ensure_cap(struct pvr_device *device,
 static inline void pvr_device_free_tile_buffer_state(struct pvr_device *device)
 {
    for (uint32_t i = 0; i < device->tile_buffer_state.buffer_count; i++)
-      pvr_bo_free(device, device->tile_buffer_state.buffers[i]);
+      pvr_bo_suballoc_free(device->tile_buffer_state.buffers[i]);
 }
 
 VkResult pvr_bind_memory(struct pvr_device *device,

@@ -126,8 +126,7 @@ VkResult pvr_init_robustness_buffer(struct pvr_device *device)
 
 #undef ROBUSTNESS_BUFFER_OFFSET_ALIGN16
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+result = pvr_bo_suballoc(&device->suballoc_general,
                          offset,
                          16,
                          PVR_BO_ALLOC_FLAG_CPU_MAPPED,
@@ -135,7 +134,7 @@ VkResult pvr_init_robustness_buffer(struct pvr_device *device)
    if (result != VK_SUCCESS)
       return result;
 
-   robustness_buffer_map = device->robustness_buffer->bo->map;
+   robustness_buffer_map = pvr_bo_suballoc_get_map_addr(device->robustness_buffer);
 
 #define ROBUSTNESS_BUFFER_RGBA(format, type, zero, one)                     \
    do {                                                                     \
@@ -245,7 +244,7 @@ VkResult pvr_init_robustness_buffer(struct pvr_device *device)
 
 void pvr_robustness_buffer_finish(struct pvr_device *device)
 {
-   pvr_bo_free(device, device->robustness_buffer);
+   pvr_bo_suballoc_free(device->robustness_buffer);
 }
 
 uint16_t pvr_get_robustness_buffer_format_offset(VkFormat format)

@@ -405,8 +405,7 @@ static VkResult pvr_rt_mta_data_init(struct pvr_device *device,
       return VK_SUCCESS;
    }
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
+   result = pvr_bo_suballoc(&device->suballoc_general,
                          mta_size * num_rt_datas,
                          ROGUE_CR_PM_MTILE_ARRAY_BASE_ADDR_ALIGNMENT,
                          PVR_BO_ALLOC_FLAG_GPU_UNCACHED,
@@ -414,7 +413,7 @@ static VkResult pvr_rt_mta_data_init(struct pvr_device *device,
    if (result != VK_SUCCESS)
       return result;
 
-   dev_addr = rt_dataset->mta_bo->vma->dev_addr;
+   dev_addr = rt_dataset->mta_bo->dev_addr;
 
    for (uint32_t i = 0; i < num_rt_datas; i++) {
       rt_dataset->rt_datas[i].mta_dev_addr = dev_addr;

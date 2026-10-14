@@ -581,7 +581,7 @@ static VkResult pvr_sub_cmd_gfx_per_job_fragment_programs_create_and_upload(
 
       assert(tile_buffer_id < tile_buffer_state->buffer_count);
       props.tile_buffer_addrs[u] =
-         tile_buffer_state->buffers[tile_buffer_id]->vma->dev_addr.addr;
+         tile_buffer_state->buffers[tile_buffer_id]->dev_addr.addr;
       has_tile_buffers = true;
    }
 
@@ -912,7 +912,7 @@ pvr_load_op_constants_create_and_upload(struct pvr_cmd_buffer *cmd_buffer,
    for (unsigned u = 0; u < load_op->num_tile_buffers; ++u) {
       assert(u < tile_buffer_state->buffer_count);
       uint64_t tile_buffer_addr =
-         tile_buffer_state->buffers[u]->vma->dev_addr.addr;
+         tile_buffer_state->buffers[u]->dev_addr.addr;
 
       tile_buffers[2 * u] = tile_buffer_addr & 0xffffffff;
       tile_buffers[2 * u + 1] = tile_buffer_addr >> 32;
@@ -5459,7 +5459,7 @@ pvr_setup_vertex_buffers(struct pvr_cmd_buffer *cmd_buffer,
              * range
              */
             addr = PVR_DEV_ADDR_OFFSET(
-               cmd_buffer->device->robustness_buffer->vma->dev_addr,
+               cmd_buffer->device->robustness_buffer->dev_addr,
                attribute->robustness_buffer_offset);
          } else {
             addr = PVR_DEV_ADDR_OFFSET(binding->buffer->dev_addr,
@@ -5976,7 +5976,7 @@ static VkResult pvr_setup_descriptor_mappings(
             for (unsigned u = 0; u < num_tile_buffers; ++u) {
                assert(u < tile_buffer_state->buffer_count);
                uint64_t tile_buffer_addr =
-                  tile_buffer_state->buffers[u]->vma->dev_addr.addr;
+                  tile_buffer_state->buffers[u]->dev_addr.addr;
 
                tile_buffer_addrs[2 * u] = tile_buffer_addr & 0xffffffff;
                tile_buffer_addrs[2 * u + 1] = tile_buffer_addr >> 32;

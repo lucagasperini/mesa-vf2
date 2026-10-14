@@ -67,19 +67,19 @@ struct pvr_render_ctx {
    struct pvr_winsys_render_ctx *ws_ctx;
 
    /* Buffer to hold the VDM call stack */
-   struct pvr_bo *vdm_callstack_bo;
+   struct pvr_suballoc_bo *vdm_callstack_bo;
 
    struct pvr_render_ctx_switch {
       /* Buffer to hold the VDM context resume control stream. */
-      struct pvr_bo *vdm_state_bo;
+      struct pvr_suballoc_bo *vdm_state_bo;
 
-      struct pvr_bo *geom_state_bo;
+      struct pvr_suballoc_bo *geom_state_bo;
 
       struct pvr_render_ctx_programs {
          /* Context switch persistent state programs. */
          struct rogue_pt_programs {
             /* Buffer used to hold the persistent state. */
-            struct pvr_bo *store_resume_state_bo;
+            struct pvr_suballoc_bo *store_resume_state_bo;
 
             /* PDS program to store out the persistent state in
              * 'store_resume_state_bo'.
@@ -112,7 +112,7 @@ struct pvr_compute_ctx {
    struct pvr_winsys_compute_ctx *ws_ctx;
 
    struct pvr_compute_ctx_switch {
-      struct pvr_bo *compute_state_bo;
+      struct pvr_suballoc_bo *compute_state_bo;
 
       struct rogue_sr_programs sr[ROGUE_NUM_SHADER_STATE_BUFFERS];
 

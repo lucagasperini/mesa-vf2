@@ -566,7 +566,7 @@ VkResult pvr_arch_spm_init_eot_state(
             pbe_state_words[total_render_target_used],
             spm_eot_state->pbe_reg_words[total_render_target_used]);
 
-         tile_buffer_addrs[total_render_target_used] = tile_buffer_state->buffers[i]->vma->dev_addr.addr;
+         tile_buffer_addrs[total_render_target_used] = tile_buffer_state->buffers[i]->dev_addr.addr;
 
          next_scratch_buffer_addr =
             PVR_DEV_ADDR_OFFSET(next_scratch_buffer_addr, mem_stored);
@@ -803,7 +803,7 @@ VkResult pvr_arch_spm_init_bgobj_state(
    for (unsigned u = 0; u < hw_render->tile_buffers_count; ++u) {
       unsigned tile_buffer_addr_location = pvr_uscgen_spm_buffer_data(u, true);
       pvr_dev_addr_t tile_buffer_addr =
-         device->tile_buffer_state.buffers[u]->vma->dev_addr;
+         device->tile_buffer_state.buffers[u]->dev_addr;
 
       mem_ptr[tile_buffer_addr_location] = tile_buffer_addr.addr & 0xffffffff;
       mem_ptr[tile_buffer_addr_location + 1] = tile_buffer_addr.addr >> 32;

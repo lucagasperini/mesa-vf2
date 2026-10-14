@@ -35,7 +35,7 @@ void pvr_rt_mta_data_fini(struct pvr_rt_dataset *rt_dataset)
    for (uint32_t i = 0; i < ARRAY_SIZE(rt_dataset->rt_datas); i++)
       rt_dataset->rt_datas[i].mta_dev_addr = PVR_DEV_ADDR_INVALID;
 
-   pvr_bo_free(rt_dataset->device, rt_dataset->mta_bo);
+   pvr_bo_suballoc_free(rt_dataset->mta_bo);
    rt_dataset->mta_bo = NULL;
 }
 
