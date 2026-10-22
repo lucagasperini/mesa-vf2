@@ -67,6 +67,7 @@ struct pvr_cache_bo {
    struct list_head link;
    struct pvr_suballoc_bo *bo;
    uint32_t size;
+   uint8_t flags;
 };
 
 struct pvr_suballocator {

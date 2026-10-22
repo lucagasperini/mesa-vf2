@@ -452,6 +452,9 @@ VkResult pvr_bo_cpu_map(struct pvr_device *device, struct pvr_bo *pvr_bo)
  */
 void pvr_bo_cpu_unmap(struct pvr_device *device, struct pvr_bo *pvr_bo)
 {
+   // FIXME: DOING NOTHING FOR NOW
+   return;
+
    struct pvr_winsys_bo *bo = pvr_bo->bo;
 
    assert(bo->map);
@@ -761,7 +764,7 @@ pvr_bo_alloc_cache(struct pvr_suballocator *allocator,
 
    if(allocator->cache_bo) {
       list_for_each_entry(struct pvr_cache_bo, i, &allocator->cache_bo->link, link) {
-         if(i->size >= size && i->bo->can_reclaim) {
+         if(i->size >= size && i->bo->can_reclaim && i->flags == flags) {
             i->bo->can_reclaim = false;
             p_atomic_inc(&i->bo->bo->ref_count);
             *suballoc_bo_out = i->bo;
@@ -786,6 +789,7 @@ pvr_bo_alloc_cache(struct pvr_suballocator *allocator,
       goto err_free;
 
    p_atomic_inc(&cache_bo->bo->bo->ref_count);
+   cache_bo->flags = flags;
    cache_bo->bo->can_reclaim = false;
    *suballoc_bo_out = cache_bo->bo;
    cache_bo->size = size;
