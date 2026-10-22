@@ -136,31 +136,31 @@ result = pvr_bo_suballoc(&device->suballoc_general,
 
    robustness_buffer_map = pvr_bo_suballoc_get_map_addr(device->robustness_buffer);
 
-#define ROBUSTNESS_BUFFER_RGBA(format, type, zero, one)                     \
-   do {                                                                     \
-      type *const buffer =                                                  \
-         (type *)robustness_buffer_map + robustness_buffer_offsets[format]; \
-      buffer[0] = (type)zero;                                               \
-      buffer[1] = (type)zero;                                               \
-      buffer[2] = (type)zero;                                               \
-      buffer[3] = (type)one;                                                \
+#define ROBUSTNESS_BUFFER_RGBA(format, type, zero, one)                       \
+   do {                                                                       \
+      type *const buffer =                                                    \
+         (type *)(robustness_buffer_map + robustness_buffer_offsets[format]); \
+      buffer[0] = (type)zero;                                                 \
+      buffer[1] = (type)zero;                                                 \
+      buffer[2] = (type)zero;                                                 \
+      buffer[3] = (type)one;                                                  \
    } while (0)
 
-#define ROBUSTNESS_BUFFER_ABGR(format, type, zero, one)                     \
-   do {                                                                     \
-      type *const buffer =                                                  \
-         (type *)robustness_buffer_map + robustness_buffer_offsets[format]; \
-      buffer[0] = (type)one;                                                \
-      buffer[1] = (type)zero;                                               \
-      buffer[2] = (type)zero;                                               \
-      buffer[3] = (type)zero;                                               \
+#define ROBUSTNESS_BUFFER_ABGR(format, type, zero, one)                       \
+   do {                                                                       \
+      type *const buffer =                                                    \
+         (type *)(robustness_buffer_map + robustness_buffer_offsets[format]); \
+      buffer[0] = (type)one;                                                  \
+      buffer[1] = (type)zero;                                                 \
+      buffer[2] = (type)zero;                                                 \
+      buffer[3] = (type)zero;                                                 \
    } while (0)
 
-#define ROBUSTNESS_BUFFER_PACKED(format, type, val)                         \
-   do {                                                                     \
-      type *const buffer =                                                  \
-         (type *)robustness_buffer_map + robustness_buffer_offsets[format]; \
-      *buffer = (type)val;                                                  \
+#define ROBUSTNESS_BUFFER_PACKED(format, type, val)                           \
+   do {                                                                       \
+      type *const buffer =                                                    \
+         (type *)(robustness_buffer_map + robustness_buffer_offsets[format]); \
+      *buffer = (type)val;                                                    \
    } while (0)
 
    ROBUSTNESS_BUFFER_RGBA(PVR_ROBUSTNESS_BUFFER_FORMAT_UINT64,
@@ -214,7 +214,7 @@ result = pvr_bo_suballoc(&device->suballoc_general,
                           uint8_t,
                           0u,
                           UINT8_MAX);
-   ROBUSTNESS_BUFFER_ABGR(PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_UINT,
+   ROBUSTNESS_BUFFER_ABGR(PVR_ROBUSTNESS_BUFFER_FORMAT_A8B8G8R8_SINT,
                           int8_t,
                           0u,
                           INT8_MAX);
